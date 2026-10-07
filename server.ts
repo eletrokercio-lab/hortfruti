@@ -561,11 +561,12 @@ ${JSON.stringify(systemContext || {}, null, 2)}
         const navActions: { keywords: string[]; action: { type: string; label: string; tab: string } }[] = [
           { keywords: ['comprar', 'necessidade de compra', 'compra de fornecedor'], action: { type: 'NAVIGATE_PLANNING_PURCHASE', label: 'Ver Necessidades e Resolver Compras', tab: 'planning' } },
           { keywords: ['colheita', 'colher'], action: { type: 'NAVIGATE_PLANNING_HARVEST', label: 'Ver Planejamento de Colheita', tab: 'planning' } },
+          { keywords: ['mercadoria', 'estoque', 'falta mercador'], action: { type: 'NAVIGATE_PLANNING', label: 'Ver Planejamento de Necessidades', tab: 'planning' } },
           { keywords: ['devedor', 'devendo', 'atrasado', 'vencido', 'receber', 'recebimento', 'pagou'], action: { type: 'NAVIGATE_RECEIVABLES_OVERDUE', label: 'Abrir Contas a Receber', tab: 'finance' } },
           { keywords: ['vasilhame', 'engradado', 'caixa devolvid'], action: { type: 'NAVIGATE_CRATES', label: 'Abrir Vasilhames', tab: 'crates' } },
           { keywords: ['fornecedor'], action: { type: 'NAVIGATE_SUPPLIERS', label: 'Abrir Fornecedores', tab: 'suppliers' } },
           { keywords: ['produto', 'preço', 'preco', 'catálogo', 'catalogo'], action: { type: 'NAVIGATE_PRODUCTS', label: 'Abrir Produtos', tab: 'products' } },
-          { keywords: ['cliente', 'mercado', 'mercadinho', 'supermercado'], action: { type: 'NAVIGATE_CUSTOMERS', label: 'Abrir Clientes', tab: 'customers' } },
+          { keywords: ['cliente', 'supermercado'], action: { type: 'NAVIGATE_CUSTOMERS', label: 'Abrir Clientes', tab: 'customers' } },
           { keywords: ['pedido'], action: { type: 'NAVIGATE_ORDERS', label: 'Abrir Pedidos', tab: 'orders' } },
           { keywords: ['entrega', 'motorista', 'rota'], action: { type: 'NAVIGATE_DELIVERIES', label: 'Acompanhar Entregas', tab: 'deliveries' } },
           { keywords: ['venda', 'faturamento', 'resumo do dia', 'hoje'], action: { type: 'NAVIGATE_DASHBOARD', label: 'Ver Central do Dia', tab: 'dashboard' } },
