@@ -40,8 +40,7 @@ BEGIN
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', ''),
     COALESCE(NEW.raw_user_meta_data->>'role', 'comprador'),
-    'ativo',
-    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.raw_user_meta_data->>'name', '')
+    'ativo'
   )
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
