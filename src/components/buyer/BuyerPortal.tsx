@@ -91,6 +91,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const [orderPlaced, setOrderPlaced] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+  const [lastPaymentWasPix, setLastPaymentWasPix] = useState(false);
 
   // Dados de entrega do comprador (salvos no cadastro do cliente)
   const [custInfo, setCustInfo] = useState({
@@ -520,6 +521,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       if (recError) throw recError;
 
       setOrderPlaced(orderNumber);
+      setLastPaymentWasPix(payment === 'pix');
       setCart({});
       setCartOpen(false);
       setNotes('');
@@ -745,6 +747,28 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                   <CircleCheckBig className="h-4 w-4" /> Pedido {orderPlaced} enviado com sucesso!
                 </p>
                 <p className="text-xs text-emerald-700">A distribuidora foi notificada e iniciará a separação.</p>
+                {lastPaymentWasPix && (
+                  <div className="mt-3 rounded-lg border border-emerald-300 bg-white p-3">
+                    {pixKey ? (
+                      <>
+                        <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                          <QrCode className="h-3.5 w-3.5" /> Pague via PIX agora mesmo e envie o comprovante:
+                        </p>
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <code className="flex-1 truncate rounded bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-gray-800">{pixKey}</code>
+                          <button onClick={copyPix} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700">
+                            {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                            {copied ? 'Copiado!' : 'Copiar chave'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="text-xs text-emerald-700">
+                        Pagamento via PIX: a chave da distribuidora será informada em seguida pelo vendedor.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
             {orders.length === 0 && (
