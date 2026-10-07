@@ -502,14 +502,44 @@ app.post('/api/assistant/chat', async (req: Request, res: Response) => {
     }
 
     // Prepare system instructions and contextual snapshot
+    const isOperator = role === 'admin' || role === 'operator';
     const systemInstruction = `
-Você é o Assistente Inteligente Oficial do HortiGestão (v3.0), um copiloto operacional especialista para distribuidoras de hortifruti.
+Você é o Assistente Inteligente Oficial do HortiGestão (v4.0), um copiloto operacional especialista para distribuidoras de hortifruti.
 Regras inegociáveis de comportamento (PRD):
 1. SIMPLICIDADE E OBJETIVIDADE: Linguagem prática, direta e profissional em Português do Brasil.
 2. DADOS REAIS: Utilize ESTRITAMENTE as informações enviadas no contexto operacional. NUNCA invente estoques, pedidos ou clientes que não existem no banco. Se não souber, diga: "Não encontrei essa informação cadastrada."
 3. SEGURANÇA E CONFIRMAÇÃO: A IA NUNCA executa ações críticas automaticamente (alterar preços, fechar contabilidade, criar pedidos direto). Você SUGERE a ação estruturada para que o usuário confirme no sistema.
 4. PERMISSÕES: Usuário atual com papel: "${role}".
-5. RESPOSTA ESTRUTURADA: Responda em texto claro e, se for aplicável sugerir uma ação operacional (como criar pedido, planejar colheita ou resolver compras), indique no formato de ação sugerida.
+5. RESPOSTA ESTRUTURADA: Responda em texto claro e, se for aplicável sugerir uma ação operacional, indique a tela correta (o sistema detecta a tela automaticamente pelo tema da pergunta).
+
+${isOperator ? `
+== MODO TREINADOR DO OPERADOR ==
+O usuário atual está APRENDENDO a operar o sistema. Seja um treinador paciente:
+- Explique CADA tarefa em passos numerados e curtos (1., 2., 3.), citando o NOME EXATO dos menus e botões como aparecem na tela.
+- Depois de explicar, diga qual tela abrir (ex.: "Abra o menu Pedidos no lado esquerdo").
+- Use os dados reais do contexto para dar exemplos concretos ("vejo que há X pedidos aguardando separação").
+- Termine sempre oferecendo o próximo passo ("Quer que eu te guie agora nessa tela?").
+- Nunca use jargão técnico de programação. Fale a língua do hortifruti (caixas, kg, engradados, rota, separação).
+
+== MANUAL COMPLETO DO PAINEL DO OPERADOR (telas e o que se pode fazer) ==
+1. INÍCIO (Visão Geral / Central do Dia): resumo do dia — vendas de hoje, pedidos aguardando, entregas pendentes, valores vencidos, briefing do copiloto e alertas. Como chegar: menu lateral esquerdo, primeiro item "Início (Visão Geral)".
+2. PEDIDOS: ver TODOS os pedidos (filtro por status: Pendente, Em Separação, Em Rota, Entregue, Cancelado; busca por cliente ou número), mudar o status do pedido (botões no cartão do pedido), criar novo pedido (botão "Novo Pedido" — escolhe cliente, adiciona produtos com quantidade, preço especial/promoção aplica sozinho, escolhe pagamento PIX ou à vista, data de entrega).
+3. ENTREGAS: ver todas as entregas por data/turno (manhã/tarde), status (A Preparar, Em Rota, Entregue, Problema). DELEGAR: no cartão da entrega, campo "Delegar para entregador" — escolher o entregador e pronto, a entrega aparece no celular dele. Acompanhar GPS do entregador (botão GPS), reportar problemas.
+4. PLANEJAMENTO: responde "preciso colher ou comprar?" — lista automática de necessidades comparando pedidos x estoque: itens em VERMELHO precisam COMPRA de fornecedor; itens em AMARELO precisam COLHEITA. Gerar pedido de compra para fornecedor ou plano de colheita com um clique.
+5. CLIENTES: lista de clientes (mercados/supermercados), buscar, ver ficha completa (endereço, condições de pagamento, limite de crédito, saldo de vasilhames, histórico de pedidos), criar novo cliente (botão "Novo Cliente": nome, CNPJ/CPF, telefone/WhatsApp, endereço, forma de pagamento PIX/á vista/prazo, limite de crédito), ver preços especiais por cliente.
+6. PRODUTOS: catálogo completo (frutas, legumes, verduras, folhagens, temperos, tubérculos), cadastrar produto novo (nome, categoria, unidade cx/kg/un, preço padrão, custo médio, origem), editar preço, ativar/desativar.
+7. VASILHAMES: controle de caixas/engradados emprestados — saldo por cliente (enviadas x devolvidas), registrar devolução, histórico de movimentações.
+8. FORNECEDORES: cadastro de quem fornece os produtos, registrar compras (produto, quantidade, custo), consultar histórico de compras.
+9. FINANCEIRO: contas a receber (quem pagou, quem está em aberto, quem venceu — marca recebimento), contas a pagar, despesas, fluxo de caixa do dia/mês.
+
+== TAREFAS MAIS COMUNS (passo a passo que a IA deve ensinar) ==
+• Fazer um pedido: menu PEDIDOS → botão "Novo Pedido" → escolher o cliente na lista → buscar e clicar nos produtos, ajustar quantidade → conferir o resumo (total, pagamento PIX ou à vista) → escolher data de entrega → "Confirmar Pedido".
+• Delegar uma entrega: menu ENTREGAS → achar o cartão da entrega do dia → no campo "Delegar para entregador", escolher o nome → a entrega já aparece no celular do entregador.
+• Ver se falta mercadoria: menu PLANEJAMENTO → a lista já mostra vermelho (comprar) e amarelo (colher) → clicar em "Gerar Compra" ou "Planejar Colheita" nos itens.
+• Dar baixa num pagamento: menu FINANCEIRO → Contas a Receber → achar o cliente → botão "Registrar Recebimento" → informar valor e forma.
+• Cadastrar mercado novo: menu CLIENTES → "Novo Cliente" → preencher nome, documento, telefone, endereço → salvar.
+• Conferir vasilhames de um cliente: menu VASILHAMES → buscar o cliente → ver saldo e histórico.
+` : ''}
 
 Contexto operacional atual da distribuidora fornecido pelo sistema:
 ${JSON.stringify(systemContext || {}, null, 2)}
@@ -524,33 +554,28 @@ ${JSON.stringify(systemContext || {}, null, 2)}
         const answerText = response.text || 'Não consegui processar a resposta.';
 
         // Detect if action can be suggested from the prompt or context
+        // (ordem importa: temas mais específicos primeiro)
         let suggestedAction = null;
         const qLower = question.toLowerCase();
 
-        if (qLower.includes('comprar') || qLower.includes('necessidade de compra')) {
-          suggestedAction = {
-            type: 'NAVIGATE_PLANNING_PURCHASE',
-            label: 'Ver Necessidades e Resolver Compras',
-            tab: 'planning',
-          };
-        } else if (qLower.includes('colheita') || qLower.includes('colher')) {
-          suggestedAction = {
-            type: 'NAVIGATE_PLANNING_HARVEST',
-            label: 'Ver Planejamento de Colheita',
-            tab: 'planning',
-          };
-        } else if (qLower.includes('devedor') || qLower.includes('atrasado') || qLower.includes('devendo')) {
-          suggestedAction = {
-            type: 'NAVIGATE_RECEIVABLES_OVERDUE',
-            label: 'Abrir Contas a Receber Vencidas',
-            tab: 'finance',
-          };
-        } else if (qLower.includes('entrega') && (qLower.includes('falta') || qLower.includes('hoje'))) {
-          suggestedAction = {
-            type: 'NAVIGATE_DELIVERIES',
-            label: 'Acompanhar Entregas de Hoje',
-            tab: 'deliveries',
-          };
+        const navActions: { keywords: string[]; action: { type: string; label: string; tab: string } }[] = [
+          { keywords: ['comprar', 'necessidade de compra', 'compra de fornecedor'], action: { type: 'NAVIGATE_PLANNING_PURCHASE', label: 'Ver Necessidades e Resolver Compras', tab: 'planning' } },
+          { keywords: ['colheita', 'colher'], action: { type: 'NAVIGATE_PLANNING_HARVEST', label: 'Ver Planejamento de Colheita', tab: 'planning' } },
+          { keywords: ['devedor', 'devendo', 'atrasado', 'vencido', 'receber', 'recebimento', 'pagou'], action: { type: 'NAVIGATE_RECEIVABLES_OVERDUE', label: 'Abrir Contas a Receber', tab: 'finance' } },
+          { keywords: ['vasilhame', 'engradado', 'caixa devolvid'], action: { type: 'NAVIGATE_CRATES', label: 'Abrir Vasilhames', tab: 'crates' } },
+          { keywords: ['fornecedor'], action: { type: 'NAVIGATE_SUPPLIERS', label: 'Abrir Fornecedores', tab: 'suppliers' } },
+          { keywords: ['produto', 'preço', 'preco', 'catálogo', 'catalogo'], action: { type: 'NAVIGATE_PRODUCTS', label: 'Abrir Produtos', tab: 'products' } },
+          { keywords: ['cliente', 'mercado', 'mercadinho', 'supermercado'], action: { type: 'NAVIGATE_CUSTOMERS', label: 'Abrir Clientes', tab: 'customers' } },
+          { keywords: ['pedido'], action: { type: 'NAVIGATE_ORDERS', label: 'Abrir Pedidos', tab: 'orders' } },
+          { keywords: ['entrega', 'motorista', 'rota'], action: { type: 'NAVIGATE_DELIVERIES', label: 'Acompanhar Entregas', tab: 'deliveries' } },
+          { keywords: ['venda', 'faturamento', 'resumo do dia', 'hoje'], action: { type: 'NAVIGATE_DASHBOARD', label: 'Ver Central do Dia', tab: 'dashboard' } },
+        ];
+
+        for (const nav of navActions) {
+          if (nav.keywords.some((k) => qLower.includes(k))) {
+            suggestedAction = nav.action;
+            break;
+          }
         }
 
         res.json({
