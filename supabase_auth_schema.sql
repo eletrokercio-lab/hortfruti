@@ -193,6 +193,9 @@ CREATE POLICY customers_staff_all ON public.customers
   FOR ALL USING (public.app_is_staff()) WITH CHECK (public.app_is_staff());
 CREATE POLICY customers_buyer_own ON public.customers
   FOR SELECT USING (id = public.app_customer_id());
+CREATE POLICY customers_buyer_update_own ON public.customers
+  FOR UPDATE USING (id = public.app_customer_id())
+  WITH CHECK (id = public.app_customer_id());
 
 -- 6.3 Pedidos e itens
 DROP POLICY IF EXISTS "Permitir leitura total para pedidos" ON public.orders;

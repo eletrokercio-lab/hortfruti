@@ -92,6 +92,19 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const [copied, setCopied] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
 
+  // Dados de entrega do comprador (salvos no cadastro do cliente)
+  const [custInfo, setCustInfo] = useState({
+    phone: '',
+    street: '',
+    number: '',
+    neighborhood: '',
+    city: '',
+    reference: '',
+    recipient: '',
+  });
+  const updateCustInfo = (field: keyof typeof custInfo, value: string) =>
+    setCustInfo((prev) => ({ ...prev, [field]: value }));
+
   // Notificações do comprador (avisos de entrega sincronizados no Supabase)
   interface BuyerNotification {
     id: string;
@@ -280,9 +293,24 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       );
     if (settingsRes?.data?.value) setPixKey(settingsRes.data.value);
 
-    // Cliente sem vínculo comercial: só catálogo
-    const { data: cust } = await client.from('customers').select('id').eq('id', customerId).maybeSingle();
+    // Dados do cadastro comercial (pré-preenchem o endereço de entrega)
+    const { data: cust } = await client
+      .from('customers')
+      .select('id, name, phone, street, number, neighborhood, city, reference')
+      .eq('id', customerId)
+      .maybeSingle();
     setNoCustomerLink(!cust);
+    if (cust) {
+      setCustInfo((prev) => ({
+        ...prev,
+        phone: cust.phone && cust.phone !== 'A informar' ? cust.phone : prev.phone,
+        street: cust.street && cust.street !== 'A informar' ? cust.street : prev.street,
+        number: cust.number && cust.number !== 'S/N' ? cust.number : prev.number,
+        neighborhood: cust.neighborhood && cust.neighborhood !== 'A informar' ? cust.neighborhood : prev.neighborhood,
+        city: cust.city && cust.city !== 'A informar' ? cust.city : prev.city,
+        reference: cust.reference || prev.reference,
+      }));
+    }
 
     setDeliveryDate(today);
     setLoading(false);
@@ -372,6 +400,10 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       setCheckoutError('Escolha a data de entrega.');
       return;
     }
+    if (!custInfo.phone.trim() || !custInfo.street.trim() || !custInfo.number.trim() || !custInfo.neighborhood.trim() || !custInfo.city.trim()) {
+      setCheckoutError('Preencha os dados de entrega: telefone, rua, número, bairro e cidade.');
+      return;
+    }
     setPlacing(true);
     const client = getSupabaseClient();
     if (!client) {
@@ -394,6 +426,28 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
         .eq('id', customerId)
         .maybeSingle();
 
+      // Salvar os dados de entrega no cadastro do cliente (best-effort)
+      await client
+        .from('customers')
+        .update({
+          phone: custInfo.phone.trim(),
+          street: custInfo.street.trim(),
+          number: custInfo.number.trim(),
+          neighborhood: custInfo.neighborhood.trim(),
+          city: custInfo.city.trim(),
+          reference: custInfo.reference.trim() || null,
+        })
+        .eq('id', customerId);
+
+      const deliveryContact = [
+        `Contato: ${custInfo.phone.trim()}`,
+        custInfo.recipient.trim() ? `Recebedor: ${custInfo.recipient.trim()}` : '',
+        custInfo.reference.trim() ? `Referência: ${custInfo.reference.trim()}` : '',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      const fullNotes = [notes?.trim(), deliveryContact].filter(Boolean).join(' — ');
+
       const { error: orderError } = await client.from('orders').insert({
         id: orderId,
         order_number: orderNumber,
@@ -407,7 +461,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
         payment_method: payment,
         payment_term: 'sight',
         payment_status: 'pendente',
-        notes: notes || null,
+        notes: fullNotes || null,
         delivery_id: deliveryId,
         receivable_id: receivableId,
       });
@@ -433,9 +487,9 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
         order_number: orderNumber,
         customer_id: customerId,
         customer_name: cust?.name || buyerName,
-        address: cust ? `${cust.street}, ${cust.number}` : 'A confirmar',
-        neighborhood: cust?.neighborhood || 'A confirmar',
-        city: cust?.city || 'A confirmar',
+        address: `${custInfo.street.trim()}, ${custInfo.number.trim()}`,
+        neighborhood: custInfo.neighborhood.trim(),
+        city: custInfo.city.trim(),
         driver_name: 'A designar',
         vehicle: 'A designar',
         date: deliveryDate,
@@ -447,7 +501,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
           expectedQty: i.quantity,
           unit: i.unit,
         })),
-        notes: notes || null,
+        notes: fullNotes || null,
       });
       if (deliveryError) throw deliveryError;
 
@@ -932,6 +986,72 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                   <option value="tarde">Tarde</option>
                 </select>
               </div>
+            </div>
+
+            {/* Dados de entrega */}
+            <div className="mt-4">
+              <label className="text-[11px] font-bold uppercase tracking-wide text-gray-500">Dados de entrega</label>
+              <div className="mt-1.5 grid grid-cols-2 gap-2">
+                <div className="col-span-2">
+                  <input
+                    value={custInfo.phone}
+                    onChange={(e) => updateCustInfo('phone', e.target.value)}
+                    placeholder="Telefone / WhatsApp *"
+                    inputMode="tel"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input
+                    value={custInfo.street}
+                    onChange={(e) => updateCustInfo('street', e.target.value)}
+                    placeholder="Rua / Avenida *"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <input
+                    value={custInfo.number}
+                    onChange={(e) => updateCustInfo('number', e.target.value)}
+                    placeholder="Número *"
+                    inputMode="numeric"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <input
+                    value={custInfo.neighborhood}
+                    onChange={(e) => updateCustInfo('neighborhood', e.target.value)}
+                    placeholder="Bairro *"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <input
+                    value={custInfo.city}
+                    onChange={(e) => updateCustInfo('city', e.target.value)}
+                    placeholder="Cidade *"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <input
+                    value={custInfo.reference}
+                    onChange={(e) => updateCustInfo('reference', e.target.value)}
+                    placeholder="Ponto de referência"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <input
+                    value={custInfo.recipient}
+                    onChange={(e) => updateCustInfo('recipient', e.target.value)}
+                    placeholder="Quem recebe"
+                    className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+              <p className="mt-1 text-[10px] text-gray-400">Os dados ficam salvos para os próximos pedidos.</p>
             </div>
 
             {/* Pagamento */}
