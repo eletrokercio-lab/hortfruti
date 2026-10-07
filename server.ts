@@ -106,7 +106,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const validRoles = ['master', 'operador', 'entregador', 'comprador'];
 
-async function requireMaster(req: Request): Promise<{ ok: boolean; error?: string; userId?: string }> {
+async function requireMaster(req: Request): Promise<{ ok: boolean; error?: string; userId?: string; token?: string }> {
   if (!SUPABASE_SERVICE_ROLE_KEY) {
     return { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY não configurada no servidor. Adicione em My app > Secrets.' };
   }
@@ -121,18 +121,29 @@ async function requireMaster(req: Request): Promise<{ ok: boolean; error?: strin
     if (!userRes.ok) return { ok: false, error: 'Sessão inválida ou expirada.' };
     const user: any = await userRes.json();
 
+    // 1ª tentativa: leitura com a service key
     const profRes = await fetch(
       `${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${user.id}&select=role,status`,
-      { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY } }
+      { headers: serviceHeaders }
     );
-    const profiles = await profRes.json();
+    let profiles: any = await profRes.json().catch(() => null);
+
+    // 2ª tentativa: leitura com o próprio token do usuário (RLS permite: dono ou master)
     if (!Array.isArray(profiles) || profiles.length === 0) {
-      return { ok: false, error: 'Perfil não encontrado.' };
+      const profRes2 = await fetch(
+        `${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${user.id}&select=role,status`,
+        { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` } }
+      );
+      profiles = await profRes2.json().catch(() => null);
+    }
+
+    if (!Array.isArray(profiles) || profiles.length === 0) {
+      return { ok: false, error: 'Perfil não encontrado no banco. Verifique se o SQL de segurança foi executado.' };
     }
     if (profiles[0].role !== 'master') {
       return { ok: false, error: 'Apenas o perfil Master pode administrar usuários.' };
     }
-    return { ok: true, userId: user.id };
+    return { ok: true, userId: user.id, token };
   } catch (err: any) {
     return { ok: false, error: 'Falha ao validar permissões: ' + err.message };
   }
@@ -206,11 +217,19 @@ app.get('/api/admin/users', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const listRes = await fetch(
+    // 1ª tentativa: service key; 2ª: token do Master (RLS permite master ler todos)
+    let listRes = await fetch(
       `${SUPABASE_URL}/rest/v1/app_profiles?select=*&order=created_at.desc`,
       { headers: serviceHeaders }
     );
-    const profiles = await listRes.json();
+    let profiles: any = await listRes.json().catch(() => null);
+    if (!Array.isArray(profiles)) {
+      listRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/app_profiles?select=*&order=created_at.desc`,
+        { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${gate.token}` } }
+      );
+      profiles = await listRes.json().catch(() => null);
+    }
     res.json({ success: true, profiles: Array.isArray(profiles) ? profiles : [] });
   } catch (err: any) {
     res.status(500).json({ error: 'Erro ao listar usuários: ' + err.message });
@@ -256,7 +275,7 @@ app.post('/api/admin/users', async (req: Request, res: Response) => {
     }
     const createdUser: any = await createRes.json();
 
-    // 2. Atualiza o perfil criado pelo trigger com os dados completos
+    // Atualiza o perfil com o token do Master (RLS: master gerencia perfis)
     const profilePatch: Record<string, any> = {
       role,
       full_name: fullName || '',
@@ -267,7 +286,7 @@ app.post('/api/admin/users', async (req: Request, res: Response) => {
 
     await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${createdUser.id}`, {
       method: 'PATCH',
-      headers: serviceHeaders,
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${gate.token}` },
       body: JSON.stringify(profilePatch),
     });
 
@@ -298,7 +317,7 @@ app.patch('/api/admin/users', async (req: Request, res: Response) => {
     }
     const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${userId}`, {
       method: 'PATCH',
-      headers: serviceHeaders,
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${gate.token}` },
       body: JSON.stringify({ status }),
     });
     if (!patchRes.ok) {
