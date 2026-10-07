@@ -83,7 +83,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewOrder, onOpenNewC
               </p>
             </div>
             <h1 className="mt-1 text-xl md:text-2xl font-black tracking-tight text-white">
-              Bom dia! O que está acontecendo hoje?
+              {(() => {
+                const h = new Date().getHours();
+                if (h >= 5 && h < 12) return 'Bom dia! O que está acontecendo hoje?';
+                if (h >= 12 && h < 18) return 'Boa tarde! O que está acontecendo hoje?';
+                return 'Boa noite! O que está acontecendo hoje?';
+              })()}
             </h1>
             <p className="mt-1 text-xs md:text-sm text-emerald-100/80">
               Resumo instantâneo das prioridades da distribuidora para manter os pedidos e rotas em dia.

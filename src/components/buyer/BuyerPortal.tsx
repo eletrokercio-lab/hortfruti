@@ -602,7 +602,12 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-lg text-white">🥬</div>
             <div>
               <p className="text-sm font-black leading-tight text-gray-900">HortiGestão</p>
-              <p className="text-[11px] leading-tight text-gray-500">Olá, {buyerName}</p>
+              <p className="text-[11px] leading-tight text-gray-500">{(() => {
+                const h = new Date().getHours();
+                if (h >= 5 && h < 12) return 'Bom dia';
+                if (h >= 12 && h < 18) return 'Boa tarde';
+                return 'Boa noite';
+              })()}, {buyerName}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
