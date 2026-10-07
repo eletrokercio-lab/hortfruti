@@ -412,11 +412,12 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       setPlacing(false);
       return;
     }
+    let orderId = '';
 
     try {
       const seq = Date.now().toString().slice(-6);
       const orderNumber = `PED-W${seq}`;
-      const orderId = `ord-w${seq}`;
+      orderId = `ord-w${seq}`;
       const deliveryId = `del-w${seq}`;
       const receivableId = `rec-w${seq}`;
 
@@ -528,6 +529,18 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       setTab('pedidos');
       loadData();
     } catch (err: any) {
+      // Reverter pedido parcialmente criado (evita pedido órfão sem itens)
+      try {
+        const c2 = getSupabaseClient();
+        if (c2 && orderId) {
+          await c2.from('deliveries').delete().eq('order_id', orderId);
+          await c2.from('accounts_receivable').delete().eq('order_id', orderId);
+          await c2.from('order_items').delete().eq('order_id', orderId);
+          await c2.from('orders').delete().eq('id', orderId);
+        }
+      } catch {
+        // reversão best-effort
+      }
       setCheckoutError(err.message || 'Falha ao enviar o pedido. Tente novamente.');
     }
     setPlacing(false);
