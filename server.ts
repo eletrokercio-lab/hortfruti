@@ -442,6 +442,38 @@ app.post('/api/github/push', async (req: Request, res: Response) => {
   }
 });
 
+// Corrente de modelos Gemini: se o principal estiver sobrecarregado (503),
+// tenta automaticamente os alternativos. Timeout por modelo para ficar
+// dentro do limite do gateway (~30s no total).
+const GEMINI_MODELS = [
+  'gemini-3.8-flash',
+  'gemini-flash-lite-latest',
+  'gemini-3.1-flash-lite',
+  'gemini-3.7-flash',
+];
+
+async function callGeminiWithFallback(
+  contents: string,
+  config: Record<string, any>,
+  perModelTimeoutMs = 7000
+): Promise<any> {
+  let lastErr: any = new Error('Nenhum modelo Gemini disponível no momento.');
+  for (const model of GEMINI_MODELS) {
+    try {
+      const geminiPromise = ai!.models.generateContent({ model, contents, config });
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout do modelo ${model}`)), perModelTimeoutMs)
+      );
+      const response: any = await Promise.race([geminiPromise, timeoutPromise]);
+      return response;
+    } catch (err: any) {
+      lastErr = err;
+      console.warn(`Gemini: modelo ${model} falhou (${err?.message}), tentando o próximo...`);
+    }
+  }
+  throw lastErr;
+}
+
 // API: AI Assistant Chat & Operational Copilot
 app.post('/api/assistant/chat', async (req: Request, res: Response) => {
   try {
@@ -485,21 +517,10 @@ ${JSON.stringify(systemContext || {}, null, 2)}
 
     if (ai) {
       try {
-        const geminiPromise = ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: question,
-          config: {
-            systemInstruction: systemInstruction,
-            temperature: 0.2,
-          },
+        const response: any = await callGeminiWithFallback(question, {
+          systemInstruction: systemInstruction,
+          temperature: 0.2,
         });
-
-        // Timeout generoso: o Gemini pode demorar na primeira chamada (cold start)
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de resposta da API')), 60000)
-        );
-
-        const response: any = await Promise.race([geminiPromise, timeoutPromise]);
         const answerText = response.text || 'Não consegui processar a resposta.';
 
         // Detect if action can be suggested from the prompt or context
@@ -668,20 +689,10 @@ Retorne um JSON exatamente no formato:
 }
 `;
 
-        const geminiPromise = ai.models.generateContent({
-          model: 'gemini-3.8-flash',
-          contents: parsePrompt,
-          config: {
-            responseMimeType: 'application/json',
-            temperature: 0.1,
-          },
+        const response: any = await callGeminiWithFallback(parsePrompt, {
+          responseMimeType: 'application/json',
+          temperature: 0.1,
         });
-
-        const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de parsing da API')), 60000)
-        );
-
-        const response: any = await Promise.race([geminiPromise, timeoutPromise]);
 
         const parsedJson = JSON.parse(response.text || '{}');
         res.json({ success: true, draft: parsedJson });
