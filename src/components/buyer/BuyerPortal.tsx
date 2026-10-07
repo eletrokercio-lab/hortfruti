@@ -161,12 +161,68 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       client.from('app_settings').select('value').eq('key', 'pix_key').maybeSingle(),
     ]);
 
-    if (prodRes.data) setProducts(prodRes.data as any);
-    if (cpRes.data) setCustomPrices(cpRes.data as any);
-    if (promoRes.data) setPromotions(promoRes.data as any);
+    if (prodRes.data)
+      setProducts(
+        (prodRes.data as any[]).map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          unit: p.unit,
+          salesType: p.sales_type,
+          defaultPrice: Number(p.default_price),
+          avgCost: Number(p.avg_cost || 0),
+          origin: p.origin || '',
+          notes: p.notes || undefined,
+          status: p.status,
+        }))
+      );
+    if (cpRes.data)
+      setCustomPrices(
+        (cpRes.data as any[]).map((cp) => ({
+          id: cp.id,
+          customerId: cp.customer_id,
+          productId: cp.product_id,
+          price: Number(cp.price),
+          updatedAt: cp.updated_at || '',
+        }))
+      );
+    if (promoRes.data)
+      setPromotions(
+        (promoRes.data as any[]).map((p) => ({
+          id: p.id,
+          customerId: p.customer_id,
+          productId: p.product_id,
+          promotionalPrice: Number(p.promotional_price),
+          startDate: p.start_date,
+          endDate: p.end_date,
+          minQuantity: Number(p.min_quantity || 1),
+          notes: p.notes || undefined,
+          active: !!p.active,
+        }))
+      );
     if (ordRes.data) {
       const list = ordRes.data as any[];
-      setOrders(list as any);
+      setOrders(
+        list.map((o) => ({
+          id: o.id,
+          orderNumber: o.order_number,
+          customerId: o.customer_id,
+          customerName: o.customer_name,
+          date: o.date,
+          deliveryDate: o.delivery_date,
+          status: o.status,
+          items: [],
+          subtotal: Number(o.subtotal || 0),
+          discount: Number(o.discount || 0),
+          total: Number(o.total || 0),
+          paymentMethod: o.payment_method,
+          paymentTerm: o.payment_term,
+          paymentStatus: o.payment_status,
+          notes: o.notes || undefined,
+          deliveryId: o.delivery_id || undefined,
+          receivableId: o.receivable_id || undefined,
+        }))
+      );
       // carrega itens dos pedidos
       const ids = list.map((o) => o.id);
       if (ids.length > 0) {
@@ -174,14 +230,54 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
         const map: Record<string, any[]> = {};
         for (const it of items || []) {
           if (!map[it.order_id]) map[it.order_id] = [];
-          map[it.order_id].push(it);
+          map[it.order_id].push({
+            productId: it.product_id,
+            productName: it.product_name,
+            unit: it.unit,
+            quantity: Number(it.quantity),
+            unitPrice: Number(it.unit_price),
+            originalPrice: Number(it.original_price || 0),
+            isPromo: !!it.is_promo,
+            subtotal: Number(it.subtotal),
+          });
         }
         setOrderItems(map);
       }
     }
-    if (delRes.data) setDeliveries(delRes.data as any);
+    if (delRes.data)
+      setDeliveries(
+        (delRes.data as any[]).map((d) => ({
+          ...d,
+          orderNumber: d.order_number || '',
+          grossWeight: d.gross_weight != null ? Number(d.gross_weight) : undefined,
+          tareWeight: d.tare_weight != null ? Number(d.tare_weight) : undefined,
+          netWeight: d.net_weight != null ? Number(d.net_weight) : undefined,
+          cratesDelivered: d.crates_delivered ?? 0,
+          cratesReturned: d.crates_returned ?? 0,
+          issueReport: d.issue_report || undefined,
+          driverNotes: d.driver_notes || undefined,
+          completedAt: d.completed_at || undefined,
+          assignedDriverId: d.assigned_driver_id || undefined,
+          routeOrder: d.route_order ?? undefined,
+        }))
+      );
     if (crateRes.data) setCrates(crateRes.data as any);
-    if (recRes.data) setReceivables(recRes.data as any);
+    if (recRes.data)
+      setReceivables(
+        (recRes.data as any[]).map((r) => ({
+          id: r.id,
+          customerId: r.customer_id,
+          customerName: r.customer_name,
+          orderId: r.order_id || undefined,
+          orderNumber: r.order_number || undefined,
+          amount: Number(r.amount),
+          paidAmount: r.paid_amount != null ? Number(r.paid_amount) : undefined,
+          dueDate: r.due_date,
+          status: r.status,
+          paymentMethod: r.payment_method,
+          notes: r.notes || undefined,
+        }))
+      );
     if (settingsRes?.data?.value) setPixKey(settingsRes.data.value);
 
     // Cliente sem vínculo comercial: só catálogo
