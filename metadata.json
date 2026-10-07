@@ -1,0 +1,8 @@
+{
+  "name": "HortiGestão - Sistema de Gestão para Hortifruti",
+  "description": "Sistema completo e automatizado para distribuidoras de hortifruti com gestão de clientes, preços individuais, pedidos, necessidades de colheita e compras, entregas, controle de vasilhames, financeiro, central do contador e assistente inteligente com IA.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
