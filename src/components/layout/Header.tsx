@@ -7,7 +7,6 @@ import {
   Check,
   ChevronDown,
   Trash2,
-  Download,
   LogOut,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -29,7 +28,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
   const { profile, signOut } = useAuth();
 
   const [showNotifications, setShowNotifications] = useState(false);
-  const [isDownloading, setIsDownloading] = useState(false);
   const isMaster = profile?.role === 'master';
 
   const roleBadge: Record<string, { title: string; color: string }> = {
@@ -39,28 +37,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
     comprador: { title: 'Comprador', color: 'bg-blue-600 text-white' },
   };
   const badge = roleBadge[profile?.role || 'operador'] || roleBadge.operador;
-
-  const handleDownloadZip = async () => {
-    setIsDownloading(true);
-    try {
-      const res = await fetch('/api/download-zip');
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'hortfrut-projeto.zip';
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (err) {
-      console.error('Falha ao baixar:', err);
-      // Fallback direct link
-      window.location.href = '/api/download-zip';
-    } finally {
-      setIsDownloading(false);
-    }
-  };
 
   const unreadNotifications = notifications.filter((n) => !n.read);
 
@@ -129,19 +105,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
           <span className="hidden sm:inline">Assistente</span>
           <span className="rounded-xs bg-emerald-200/80 px-1 text-[10px] text-emerald-900 font-bold">IA</span>
         </button>
-
-        {/* Download Project ZIP (apenas Master) */}
-        {isMaster && (
-          <button
-            onClick={handleDownloadZip}
-            disabled={isDownloading}
-            className="hidden sm:flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-colors shadow-2xs cursor-pointer active:scale-95"
-            title="Baixar arquivos do projeto (.ZIP) para seu computador"
-          >
-            <Download className={`h-4 w-4 text-emerald-600 ${isDownloading ? 'animate-bounce' : ''}`} />
-            <span>{isDownloading ? 'Baixando...' : 'Baixar ZIP'}</span>
-          </button>
-        )}
 
         {/* Notifications Dropdown */}
         <div className="relative">

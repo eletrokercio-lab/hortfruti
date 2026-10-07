@@ -15,7 +15,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Users,
-  Download,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatDate, getOrderStatusBadge } from '../../utils/formatters';
@@ -73,32 +72,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewOrder, onOpenNewC
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Download Project ZIP Notification Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs">
-            <Download className="h-5 w-5" />
-          </div>
-          <div>
-            <h2 className="text-sm font-black text-emerald-950">
-              Baixar Código Fonte do Projeto (.ZIP)
-            </h2>
-            <p className="text-xs text-emerald-800">
-              Clique no botão para baixar todos os arquivos para o seu computador e enviar para o GitHub.
-            </p>
-          </div>
-        </div>
-
-        <a
-          href="/api/download-zip"
-          download="hortfrut-projeto.zip"
-          className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-black text-white shadow-md transition-all active:scale-95 shrink-0"
-        >
-          <Download className="h-4 w-4" />
-          <span>Baixar ZIP do Projeto (105 KB)</span>
-        </a>
-      </div>
-
       {/* PRD §56: Morning Briefing Card (Copiloto Operacional da Distribuidora) */}
       <div className="rounded-2xl border border-emerald-200 bg-linear-to-r from-emerald-900 via-teal-950 to-emerald-950 p-5 md:p-6 text-white shadow-xl">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">

@@ -17,7 +17,6 @@ import {
   UploadCloud,
   RefreshCw,
   Download,
-  FolderArchive,
   Save,
   KeyRound,
   Globe,
@@ -224,67 +223,6 @@ export const SettingsView: React.FC = () => {
         <p className="text-xs text-gray-500 mt-0.5">
           Conecte seu banco de dados Supabase, baixe o projeto para seu computador e gerencie a distribuição
         </p>
-      </div>
-
-      {/* Local PC Download Card */}
-      <div className="rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30 p-6 shadow-sm space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-emerald-100 pb-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-600 text-white font-black text-xl shadow-xs">
-              <FolderArchive className="h-6 w-6" />
-            </div>
-            <div>
-              <h2 className="text-base font-bold text-gray-900">Projeto no seu Computador (PC)</h2>
-              <p className="text-xs text-gray-600">
-                Instale e rode diretamente na sua pasta local:{' '}
-                <code className="bg-emerald-100/70 text-emerald-900 font-mono px-1.5 py-0.5 rounded text-[11px] font-semibold">
-                  C:\Users\kerci\OneDrive\Documentos\hortfrut-projeto
-                </code>
-              </p>
-            </div>
-          </div>
-
-          <a
-            href="/api/download-zip"
-            download="hortfrut-projeto.zip"
-            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 text-xs font-bold shadow-md hover:shadow-lg transition-all"
-          >
-            <Download className="h-4 w-4" />
-            <span>Baixar Código Completo (.ZIP)</span>
-          </a>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-          <div className="p-3.5 rounded-xl bg-white border border-gray-200 space-y-1">
-            <span className="font-bold text-gray-900 flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black flex items-center justify-center">1</span>
-              Baixe o arquivo ZIP
-            </span>
-            <p className="text-gray-600 text-[11px]">
-              Clique no botão verde acima para baixar o arquivo <code className="text-emerald-700">hortfrut-projeto.zip</code>.
-            </p>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-white border border-gray-200 space-y-1">
-            <span className="font-bold text-gray-900 flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black flex items-center justify-center">2</span>
-              Extraia na sua pasta
-            </span>
-            <p className="text-gray-600 text-[11px]">
-              Mova para <span className="font-mono text-[10px] text-gray-700">hortfrut-projeto</span> e use "Extrair tudo aqui" no Windows.
-            </p>
-          </div>
-
-          <div className="p-3.5 rounded-xl bg-white border border-gray-200 space-y-1">
-            <span className="font-bold text-gray-900 flex items-center gap-1.5">
-              <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-black flex items-center justify-center">3</span>
-              Rode npm install & dev
-            </span>
-            <p className="text-gray-600 text-[11px]">
-              Abra o terminal na pasta e execute <code className="bg-gray-100 px-1 rounded text-[10px]">npm install</code> e <code className="bg-gray-100 px-1 rounded text-[10px]">npm run dev</code>.
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* Supabase Integration Card */}
