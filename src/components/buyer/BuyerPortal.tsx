@@ -530,6 +530,20 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       });
       if (recError) throw recError;
 
+      // Notificar o operador/distribuidor sobre o novo pedido
+      try {
+        await client.from('notifications').insert({
+          id: crypto.randomUUID(),
+          audience: 'operador',
+          type: 'order',
+          title: 'Novo Pedido Criado',
+          message: `${buyerName} fez o pedido ${orderNumber} no valor de R$ ${cartTotal.toFixed(2).replace('.', ',')} (entrega ${new Date(deliveryDate + 'T12:00:00').toLocaleDateString('pt-BR')}, turno ${shift === 'manha' ? 'manhã' : 'tarde'}).`,
+          action_tab: 'orders',
+        });
+      } catch {
+        // notificação é best-effort; pedido já foi criado
+      }
+
       setOrderPlaced(orderNumber);
       setLastPaymentWasPix(payment === 'pix');
       setCart({});
