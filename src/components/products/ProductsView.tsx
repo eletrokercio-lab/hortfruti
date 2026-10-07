@@ -21,6 +21,8 @@ export const ProductsView: React.FC = () => {
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [quickSearch, setQuickSearch] = useState('');
+  const [quickOpen, setQuickOpen] = useState(false);
 
   // Form State
   const [name, setName] = useState('');
@@ -31,6 +33,44 @@ export const ProductsView: React.FC = () => {
   const [avgCost, setAvgCost] = useState<number>(30);
   const [origin, setOrigin] = useState('');
   const [notes, setNotes] = useState('');
+
+  // Hortifrutis comuns: 1 toque preenche o cadastro (só ajustar preço)
+  const QUICK_CATALOG: { name: string; category: ProductCategory; unit: ProductUnit; salesType: ProductSalesType; cost: number; price: number }[] = [
+    { name: 'Tomate Italiano', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 60, price: 85 },
+    { name: 'Tomate Salada', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 50, price: 72 },
+    { name: 'Cebola Pêra Nacional', category: 'legumes', unit: 'saco', salesType: 'peso', cost: 55, price: 75 },
+    { name: 'Batata Inglesa Lavada', category: 'tuberculos', unit: 'saco', salesType: 'peso', cost: 95, price: 130 },
+    { name: 'Batata Doce', category: 'tuberculos', unit: 'cx', salesType: 'caixa', cost: 45, price: 65 },
+    { name: 'Cenoura', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 35, price: 52 },
+    { name: 'Beterraba', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 30, price: 45 },
+    { name: 'Abobrinha Italiana', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 40, price: 58 },
+    { name: 'Chuchu', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 28, price: 42 },
+    { name: 'Pepino Comum', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 32, price: 48 },
+    { name: 'Pimentão Verde', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 48, price: 68 },
+    { name: 'Vagem', category: 'legumes', unit: 'cx', salesType: 'caixa', cost: 55, price: 78 },
+    { name: 'Banana Prata', category: 'frutas', unit: 'cx', salesType: 'caixa', cost: 48, price: 68 },
+    { name: 'Maçã Gala', category: 'frutas', unit: 'cx', salesType: 'caixa', cost: 90, price: 125 },
+    { name: 'Mamão Formosa', category: 'frutas', unit: 'cx', salesType: 'caixa', cost: 42, price: 62 },
+    { name: 'Laranja Pera', category: 'frutas', unit: 'saco', salesType: 'peso', cost: 38, price: 55 },
+    { name: 'Melancia', category: 'frutas', unit: 'un', salesType: 'unidade', cost: 25, price: 40 },
+    { name: 'Abacaxi Pérola', category: 'frutas', unit: 'un', salesType: 'unidade', cost: 8, price: 14 },
+    { name: 'Uva Itália', category: 'frutas', unit: 'cx', salesType: 'caixa', cost: 110, price: 150 },
+    { name: 'Manga Palmer', category: 'frutas', unit: 'cx', salesType: 'caixa', cost: 55, price: 78 },
+    { name: 'Limão Taiti', category: 'frutas', unit: 'cx', salesType: 'caixa', cost: 45, price: 65 },
+    { name: 'Morango', category: 'frutas', unit: 'bandeja', salesType: 'unidade', cost: 9, price: 15 },
+    { name: 'Repolho Verde', category: 'verduras', unit: 'cx', salesType: 'caixa', cost: 35, price: 52 },
+    { name: 'Brócolis Ninja', category: 'verduras', unit: 'cx', salesType: 'caixa', cost: 48, price: 68 },
+    { name: 'Couve-Flor', category: 'verduras', unit: 'un', salesType: 'unidade', cost: 7, price: 12 },
+    { name: 'Abóbora Cabotiá', category: 'verduras', unit: 'cx', salesType: 'peso', cost: 32, price: 48 },
+    { name: 'Alface Crespa', category: 'folhagens', unit: 'cx', salesType: 'caixa', cost: 30, price: 42 },
+    { name: 'Rúcula', category: 'folhagens', unit: 'cx', salesType: 'caixa', cost: 26, price: 38 },
+    { name: 'Espinafre', category: 'folhagens', unit: 'cx', salesType: 'caixa', cost: 28, price: 40 },
+    { name: 'Coentro', category: 'temperos', unit: 'cx', salesType: 'caixa', cost: 22, price: 34 },
+    { name: 'Cebolinha', category: 'temperos', unit: 'cx', salesType: 'caixa', cost: 22, price: 34 },
+    { name: 'Salsinha', category: 'temperos', unit: 'cx', salesType: 'caixa', cost: 22, price: 34 },
+    { name: 'Alho', category: 'temperos', unit: 'saco', salesType: 'peso', cost: 160, price: 210 },
+    { name: 'Mandioca', category: 'tuberculos', unit: 'cx', salesType: 'peso', cost: 40, price: 58 },
+  ];
 
   const filtered = products.filter((p) => {
     const matchesSearch =
@@ -65,6 +105,25 @@ export const ProductsView: React.FC = () => {
     setNotes(p.notes || '');
     setIsModalOpen(true);
   };
+
+  const handleQuickAdd = (item: (typeof QUICK_CATALOG)[number]) => {
+    setEditingProduct(null);
+    setName(item.name);
+    setCategory(item.category);
+    setUnit(item.unit);
+    setSalesType(item.salesType);
+    setDefaultPrice(item.price);
+    setAvgCost(item.cost);
+    setOrigin('');
+    setNotes('');
+    setIsModalOpen(true);
+  };
+
+  const quickFiltered = QUICK_CATALOG.filter((q) =>
+    q.name.toLowerCase().includes(quickSearch.toLowerCase())
+  );
+  const isAlreadyRegistered = (qName: string) =>
+    products.some((p) => p.name.toLowerCase() === qName.toLowerCase());
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -152,6 +211,68 @@ export const ProductsView: React.FC = () => {
             <option value="outros">Outros</option>
           </select>
         </div>
+      </div>
+
+      {/* Adicionar Hortifruti rápido */}
+      <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 shadow-2xs overflow-hidden">
+        <button
+          onClick={() => setQuickOpen((v) => !v)}
+          className="flex w-full items-center justify-between px-4 py-3 text-left hover:bg-emerald-50"
+        >
+          <div className="flex items-center gap-2">
+            <Plus className="h-4 w-4 text-emerald-600" />
+            <div>
+              <p className="text-xs font-black text-emerald-900">Adicionar Hortifruti</p>
+              <p className="text-[10px] text-emerald-700">
+                Toque no produto e ele já vem preenchido — só ajustar o preço e salvar
+              </p>
+            </div>
+          </div>
+          <span className="text-[10px] font-bold text-emerald-700">{quickOpen ? 'FECHAR' : 'ABRIR'}</span>
+        </button>
+        {quickOpen && (
+          <div className="border-t border-emerald-100 bg-white px-4 py-3">
+            <div className="relative mb-3">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                value={quickSearch}
+                onChange={(e) => setQuickSearch(e.target.value)}
+                placeholder="Buscar produto (ex: banana, tomate...)"
+                className="w-full rounded-xl border border-gray-200 bg-gray-50/60 pl-9 pr-4 py-2 text-xs text-gray-900 placeholder:text-gray-400 focus:bg-white focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {quickFiltered.map((q) => {
+                const registered = isAlreadyRegistered(q.name);
+                return (
+                  <button
+                    key={q.name}
+                    onClick={() => !registered && handleQuickAdd(q)}
+                    disabled={registered}
+                    title={registered ? 'Já cadastrado' : `Adicionar ${q.name}`}
+                    className={`rounded-full border px-3 py-1.5 text-[11px] font-bold transition-all active:scale-95 ${
+                      registered
+                        ? 'cursor-default border-gray-200 bg-gray-100 text-gray-400'
+                        : 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                    }`}
+                  >
+                    {registered ? '✓ ' : '+ '}
+                    {q.name}
+                    <span className="ml-1 font-normal text-gray-400">
+                      {q.unit === 'un' ? 'un' : q.unit}
+                    </span>
+                  </button>
+                );
+              })}
+              {quickFiltered.length === 0 && (
+                <p className="text-xs text-gray-500 py-2">
+                  Não encontrou? Use "Novo Produto" para cadastrar do zero.
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Products Table */}
