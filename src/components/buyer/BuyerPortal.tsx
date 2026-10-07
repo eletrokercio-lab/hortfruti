@@ -21,6 +21,7 @@ import {
   CircleCheckBig,
   Loader2,
   ClipboardList,
+  Bell,
 } from 'lucide-react';
 import { getSupabaseClient } from '../../lib/supabase';
 import type {
@@ -90,6 +91,55 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const [orderPlaced, setOrderPlaced] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
+
+  // Notificações do comprador (avisos de entrega sincronizados no Supabase)
+  interface BuyerNotification {
+    id: string;
+    title: string;
+    message: string;
+    read: boolean;
+    created_at: string;
+  }
+  const [notifs, setNotifs] = useState<BuyerNotification[]>([]);
+  const [notifOpen, setNotifOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const sync = async () => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      try {
+        const { data, error } = await client
+          .from('notifications')
+          .select('*')
+          .eq('audience', 'comprador')
+          .eq('customer_id', customerId)
+          .order('created_at', { ascending: false })
+          .limit(30);
+        if (!error && !cancelled && data) setNotifs(data as BuyerNotification[]);
+      } catch {
+        // sem conexão: mantém as últimas carregadas
+      }
+    };
+    sync();
+    const poll = setInterval(sync, 45000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, [customerId]);
+
+  const unreadNotifs = notifs.filter((n) => !n.read).length;
+
+  const markNotifRead = async (id: string) => {
+    setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    try {
+      const client = getSupabaseClient();
+      if (client) await client.from('notifications').update({ read: true }).eq('id', id);
+    } catch {
+      // silencioso
+    }
+  };
 
   const loadData = useCallback(async () => {
     const client = getSupabaseClient();
@@ -367,12 +417,66 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
               <p className="text-[11px] leading-tight text-gray-500">Olá, {buyerName}</p>
             </div>
           </div>
-          <button
-            onClick={onSignOut}
-            className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"
-          >
-            <LogOut className="h-3.5 w-3.5" /> Sair
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <button
+                onClick={() => setNotifOpen((v) => !v)}
+                className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
+                aria-label="Notificações"
+              >
+                <Bell className="h-4 w-4" />
+                {unreadNotifs > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {unreadNotifs}
+                  </span>
+                )}
+              </button>
+              {notifOpen && (
+                <div className="absolute right-0 top-11 z-40 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+                  <div className="border-b border-gray-100 px-4 py-2.5 text-sm font-bold text-gray-900">
+                    Notificações
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {notifs.length === 0 ? (
+                      <p className="px-4 py-6 text-center text-xs text-gray-500">
+                        Nenhuma notificação por aqui ainda.
+                      </p>
+                    ) : (
+                      notifs.map((n) => (
+                        <button
+                          key={n.id}
+                          onClick={() => { if (!n.read) markNotifRead(n.id); }}
+                          className={`block w-full border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${
+                            n.read ? 'opacity-60' : 'bg-emerald-50/50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-bold text-gray-900">{n.title}</p>
+                            {!n.read && <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />}
+                          </div>
+                          <p className="mt-0.5 text-xs text-gray-600">{n.message}</p>
+                          <p className="mt-1 text-[10px] text-gray-400">
+                            {new Date(n.created_at).toLocaleString('pt-BR', {
+                              day: '2-digit',
+                              month: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                          </p>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <button
+              onClick={onSignOut}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+            >
+              <LogOut className="h-3.5 w-3.5" /> Sair
+            </button>
+          </div>
         </div>
 
         {/* Abas */}

@@ -282,6 +282,42 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })();
   }, []);
 
+  // Notificações remotas (staff): pull inicial + atualização a cada 45s
+  useEffect(() => {
+    let cancelled = false;
+    const syncNotifications = async () => {
+      const { liveSync } = await import('../services/liveSync');
+      if (!liveSync.isAvailable()) return;
+      const remoteNotifs = await liveSync.pullNotifications('operador');
+      if (cancelled || remoteNotifs.length === 0) return;
+      setNotifications((prev) => {
+        const remoteIds = new Set(remoteNotifs.map((n) => n.id));
+        const locals = prev.filter((n) => !remoteIds.has(n.id));
+        const remoteItems: NotificationItem[] = remoteNotifs.map((rn) => ({
+          id: rn.id,
+          type: rn.type as NotificationItem['type'],
+          title: rn.title,
+          message: rn.message,
+          date: new Date(rn.created_at).toLocaleString('pt-BR', {
+            day: '2-digit',
+            month: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          read: rn.read,
+          actionTab: rn.action_tab || undefined,
+        }));
+        return [...remoteItems, ...locals];
+      });
+    };
+    syncNotifications();
+    const poll = setInterval(syncNotifications, 45000);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+    };
+  }, []);
+
   // Save to localStorage
   useEffect(() => {
     localStorage.setItem('hg_products', JSON.stringify(products));
@@ -586,6 +622,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (async () => {
       const { liveSync } = await import('../services/liveSync');
       await liveSync.pushOrder(newOrder, newDelivery, newReceivable);
+      await liveSync.pushNotification({
+        id: genNotificationId(),
+        audience: 'operador',
+        type: 'order',
+        title: 'Novo Pedido Criado',
+        message: newNotif.message,
+        actionTab: 'orders',
+      });
     })();
 
     return newOrder;
@@ -620,6 +664,81 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDeliveries((prev) =>
       prev.map((d) => (d.id === deliveryId ? { ...d, status } : d))
     );
+
+    // Notificar comprador + distribuidor quando a entrega sai para rota
+    if (status === 'em_rota') {
+      const delivery = deliveries.find((d) => d.id === deliveryId);
+      if (delivery) notifyDeliveryEvent(delivery, 'em_rota');
+    }
+  };
+
+  // Gera id único para notificações (compatível com UUID do Supabase)
+  const genNotificationId = () =>
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `notif-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+
+  // Avisos de entrega: operador (distribuidor) e comprador, sincronizados no Supabase
+  const notifyDeliveryEvent = (
+    delivery: Delivery,
+    kind: 'em_rota' | 'entregue' | 'problema'
+  ) => {
+    const config = {
+      em_rota: {
+        type: 'delivery' as const,
+        title: 'Entrega em rota',
+        msgOp: `Entrega do pedido ${delivery.orderNumber} para ${delivery.customerName} saiu para entrega com ${delivery.driverName}.`,
+        msgBuyer: `Seu pedido ${delivery.orderNumber} saiu para entrega! O entregador ${delivery.driverName} está a caminho.`,
+      },
+      entregue: {
+        type: 'delivery' as const,
+        title: 'Entrega concluída',
+        msgOp: `Entrega do pedido ${delivery.orderNumber} para ${delivery.customerName} foi concluída com sucesso.`,
+        msgBuyer: `Seu pedido ${delivery.orderNumber} foi entregue. Bom aproveito!`,
+      },
+      problema: {
+        type: 'issue' as const,
+        title: 'Problema na entrega',
+        msgOp: `O entregador reportou um problema na entrega do pedido ${delivery.orderNumber} (${delivery.customerName}).`,
+        msgBuyer: `Ocorreu um problema na entrega do seu pedido ${delivery.orderNumber}. A distribuidora entrará em contato.`,
+      },
+    }[kind];
+
+    const idOp = genNotificationId();
+    const idBuyer = genNotificationId();
+
+    setNotifications((prev) => [
+      {
+        id: idOp,
+        type: config.type,
+        title: config.title,
+        message: config.msgOp,
+        date: 'Agora mesmo',
+        read: false,
+        actionTab: 'deliveries',
+      },
+      ...prev,
+    ]);
+
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushNotification({
+        id: idOp,
+        audience: 'operador',
+        type: config.type,
+        title: config.title,
+        message: config.msgOp,
+        actionTab: 'deliveries',
+      });
+      await liveSync.pushNotification({
+        id: idBuyer,
+        audience: 'comprador',
+        customerId: delivery.customerId,
+        type: config.type,
+        title: config.title,
+        message: config.msgBuyer,
+      });
+    })();
   };
 
   // Delegar entrega a um entregador (perfil autenticado)
@@ -739,6 +858,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         await liveSync.pushOrderStatus(delivery.orderId, data.issueReport ? 'em_rota' : 'entregue');
       }
     })();
+
+    // Notificar comprador + distribuidor sobre a conclusão da entrega
+    notifyDeliveryEvent(delivery, data.issueReport ? 'problema' : 'entregue');
   };
 
   // Customer Management
@@ -1033,6 +1155,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const markNotificationAsRead = (id: string) => {
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    // Sincronizar "lida" no Supabase (multi-aparelho)
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.markNotificationRead(id);
+    })();
   };
 
   const clearAllNotifications = () => {

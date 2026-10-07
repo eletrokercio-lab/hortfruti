@@ -22,6 +22,18 @@ import type {
  * os dados remotos sobrepõem quando existem.
  */
 
+export interface RemoteNotification {
+  id: string;
+  audience: 'operador' | 'comprador';
+  customer_id?: string | null;
+  type: string;
+  title: string;
+  message: string;
+  action_tab?: string | null;
+  read: boolean;
+  created_at: string;
+}
+
 export const liveSync = {
   isAvailable: () => isSupabaseConfigured() && getSupabaseClient() !== null,
 
@@ -296,5 +308,63 @@ export const liveSync = {
     if (extra?.driverNotes != null) patch.driver_notes = extra.driverNotes;
     if (status === 'entregue') patch.completed_at = new Date().toISOString();
     await client.from('deliveries').update(patch).eq('id', deliveryId);
+  },
+
+  // ----------------------------------------------------------
+  // NOTIFICAÇÕES — avisos multi-aparelho (operador e comprador)
+  // ----------------------------------------------------------
+  pushNotification: async (n: {
+    id: string;
+    audience: 'operador' | 'comprador';
+    customerId?: string;
+    type: string;
+    title: string;
+    message: string;
+    actionTab?: string;
+  }): Promise<boolean> => {
+    const client = getSupabaseClient();
+    if (!client) return false;
+    try {
+      const { error } = await client.from('notifications').insert({
+        id: n.id,
+        audience: n.audience,
+        customer_id: n.customerId || null,
+        type: n.type,
+        title: n.title,
+        message: n.message,
+        action_tab: n.actionTab || null,
+      });
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  pullNotifications: async (
+    audience: 'operador' | 'comprador',
+    customerId?: string
+  ): Promise<RemoteNotification[]> => {
+    const client = getSupabaseClient();
+    if (!client) return [];
+    try {
+      let query = client
+        .from('notifications')
+        .select('*')
+        .eq('audience', audience)
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (customerId) query = query.eq('customer_id', customerId);
+      const { data, error } = await query;
+      if (error) return [];
+      return (data || []) as RemoteNotification[];
+    } catch {
+      return [];
+    }
+  },
+
+  markNotificationRead: async (id: string): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    await client.from('notifications').update({ read: true }).eq('id', id);
   },
 };
