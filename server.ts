@@ -284,6 +284,36 @@ app.post('/api/admin/users', async (req: Request, res: Response) => {
     if (customerId) profilePatch.customer_id = customerId;
     if (driverName) profilePatch.driver_name = driverName;
 
+    // Comprador sem vínculo: cria o cadastro de cliente via service_role
+    // (garante o vínculo mesmo se o trigger de auto-vínculo não estiver aplicado)
+    if (role === 'comprador' && !customerId) {
+      try {
+        const newCustId = 'cust-' + String(createdUser.id).replace(/-/g, '').slice(0, 8).toUpperCase();
+        const custRes = await fetch(`${SUPABASE_URL}/rest/v1/customers`, {
+          method: 'POST',
+          headers: { ...serviceHeaders, Prefer: 'resolution=merge-duplicates' },
+          body: JSON.stringify({
+            id: newCustId,
+            name: fullName || createdUser.email,
+            document: '',
+            phone: '',
+            street: 'A informar',
+            number: 'S/N',
+            neighborhood: 'A informar',
+            city: 'A informar',
+            status: 'active',
+            payment_method: 'pix',
+            payment_term: 'vista',
+            commercial_condition: 'Auto-cadastro pelo app',
+            notes: 'Cadastro criado automaticamente na criação da conta.',
+          }),
+        });
+        if (custRes.ok) profilePatch.customer_id = newCustId;
+      } catch {
+        // best-effort: o trigger/backfill cobre depois
+      }
+    }
+
     await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${createdUser.id}`, {
       method: 'PATCH',
       headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${gate.token}` },

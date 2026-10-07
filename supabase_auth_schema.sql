@@ -145,11 +145,13 @@ $$;
 -- ------------------------------------------------------------
 DROP POLICY IF EXISTS profiles_select_own ON public.app_profiles;
 CREATE POLICY profiles_select_own ON public.app_profiles
-  FOR SELECT USING (id = auth.uid() OR public.app_is_master());
-
+  FOR SELECT USING (id = auth.uid());
+DROP POLICY IF EXISTS profiles_staff_read ON public.app_profiles;
+CREATE POLICY profiles_staff_read ON public.app_profiles
+  FOR SELECT USING (public.app_is_staff());
 DROP POLICY IF EXISTS profiles_master_manage ON public.app_profiles;
 CREATE POLICY profiles_master_manage ON public.app_profiles
-  FOR UPDATE USING (public.app_is_master());
+  FOR ALL USING (public.app_is_master()) WITH CHECK (public.app_is_master());
 
 -- ------------------------------------------------------------
 -- 5. Novas colunas operacionais
@@ -196,6 +198,13 @@ CREATE POLICY customers_buyer_own ON public.customers
 CREATE POLICY customers_buyer_update_own ON public.customers
   FOR UPDATE USING (id = public.app_customer_id())
   WITH CHECK (id = public.app_customer_id());
+
+-- 6.2b Produtos: catálogo legível a autenticados; escrita só staff
+ALTER TABLE public.products ENABLE ROW LEVEL SECURITY;
+CREATE POLICY products_select_auth ON public.products
+  FOR SELECT USING (auth.role() = 'authenticated');
+CREATE POLICY products_write_staff ON public.products
+  FOR ALL USING (public.app_is_staff()) WITH CHECK (public.app_is_staff());
 
 -- 6.3 Pedidos e itens
 DROP POLICY IF EXISTS "Permitir leitura total para pedidos" ON public.orders;

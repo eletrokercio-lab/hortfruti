@@ -280,6 +280,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (remote.orders.length > 0) setOrders(remote.orders);
       if (remote.deliveries.length > 0) setDeliveries(remote.deliveries);
       if (remote.receivables.length > 0) setReceivables(remote.receivables);
+      if (remote.customPrices.length > 0) setCustomPrices(remote.customPrices);
+      if (remote.promotions.length > 0) setPromotions(remote.promotions);
+      if (remote.crates.length > 0) setCrates(remote.crates);
     })();
   }, []);
 
@@ -919,6 +922,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notes: `Entrega ${delivery.orderNumber}. Devolvidas: ${data.cratesReturned}. Enviadas: ${data.cratesDelivered}.`,
       };
       setCrates((prev) => [crateEntry, ...prev]);
+      (async () => {
+        const { liveSync } = await import('../services/liveSync');
+        await liveSync.pushCrate(crateEntry);
+      })();
     }
 
     // Persistir no Supabase
@@ -949,32 +956,43 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString().split('T')[0],
     };
     setCustomers((prev) => [newCustomer, ...prev]);
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushCustomer(newCustomer);
+    })();
     return newCustomer;
   };
 
   const updateCustomer = (updated: Customer) => {
     setCustomers((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushCustomer(updated);
+    })();
   };
 
   // Custom Prices
   const setCustomerCustomPrice = (customerId: string, productId: string, price: number) => {
-    setCustomPrices((prev) => {
-      const filtered = prev.filter((cp) => !(cp.customerId === customerId && cp.productId === productId));
-      return [
-        ...filtered,
-        {
-          id: `cp-${Date.now()}`,
-          customerId,
-          productId,
-          price,
-          updatedAt: new Date().toISOString().split('T')[0],
-        },
-      ];
-    });
+    const cp: CustomPrice = {
+      id: `cp-${Date.now()}`,
+      customerId,
+      productId,
+      price,
+      updatedAt: new Date().toISOString().split('T')[0],
+    };
+    setCustomPrices((prev) => [...prev.filter((c) => !(c.customerId === customerId && c.productId === productId)), cp]);
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushCustomPrice(cp);
+    })();
   };
 
   const deleteCustomerCustomPrice = (id: string) => {
     setCustomPrices((prev) => prev.filter((cp) => cp.id !== id));
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.deleteCustomPrice(id);
+    })();
   };
 
   // Promotions
@@ -984,13 +1002,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `promo-${Date.now()}`,
     };
     setPromotions((prev) => [newPromo, ...prev]);
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushPromotion(newPromo);
+    })();
     return newPromo;
   };
 
   const togglePromotionActive = (promoId: string) => {
-    setPromotions((prev) =>
-      prev.map((p) => (p.id === promoId ? { ...p, active: !p.active } : p))
-    );
+    setPromotions((prev) => {
+      const updated = prev.map((p) => (p.id === promoId ? { ...p, active: !p.active } : p));
+      const changed = updated.find((p) => p.id === promoId);
+      if (changed) {
+        (async () => {
+          const { liveSync } = await import('../services/liveSync');
+          await liveSync.updatePromotion(promoId, changed.active);
+        })();
+      }
+      return updated;
+    });
   };
 
   // Products
@@ -1000,11 +1030,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: `prod-${Date.now()}`,
     };
     setProducts((prev) => [...prev, newProduct]);
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushProduct(newProduct);
+    })();
     return newProduct;
   };
 
   const updateProduct = (updated: Product) => {
     setProducts((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushProduct(updated);
+    })();
   };
 
   // Purchases & Accounts Payable

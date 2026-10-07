@@ -7,6 +7,9 @@ import type {
   Product,
   Customer,
   AccountsReceivable,
+  CustomPrice,
+  Promotion,
+  CrateRecord,
   PaymentMethod,
   PaymentTerm,
   OrderStatus,
@@ -46,13 +49,16 @@ export const liveSync = {
     products: Product[];
     customers: Customer[];
     receivables: AccountsReceivable[];
+    customPrices: CustomPrice[];
+    promotions: Promotion[];
+    crates: CrateRecord[];
   }> => {
     const client = getSupabaseClient();
-    const empty = { orders: [], deliveries: [], products: [], customers: [], receivables: [] };
+    const empty = { orders: [], deliveries: [], products: [], customers: [], receivables: [], customPrices: [], promotions: [], crates: [] };
     if (!client) return empty;
 
     try {
-      const [ordersRes, itemsRes, deliveriesRes, productsRes, customersRes, receivablesRes] =
+      const [ordersRes, itemsRes, deliveriesRes, productsRes, customersRes, receivablesRes, customPricesRes, promotionsRes, cratesRes] =
         await Promise.all([
           client.from('orders').select('*').order('created_at', { ascending: false }).limit(300),
           client.from('order_items').select('*').limit(2000),
@@ -60,6 +66,9 @@ export const liveSync = {
           client.from('products').select('*').order('name'),
           client.from('customers').select('*').order('name'),
           client.from('accounts_receivable').select('*').order('due_date', { ascending: false }).limit(300),
+          client.from('custom_prices').select('*').limit(2000),
+          client.from('promotions').select('*').limit(1000),
+          client.from('crates').select('*').order('date', { ascending: false }).limit(500),
         ]);
 
       // Pedidos + itens
@@ -188,7 +197,44 @@ export const liveSync = {
         notes: r.notes || undefined,
       }));
 
-      return { orders, deliveries, products, customers, receivables };
+      // Preços especiais
+      const customPrices: CustomPrice[] = (customPricesRes.data || []).map((cp: any) => ({
+        id: cp.id,
+        customerId: cp.customer_id,
+        productId: cp.product_id,
+        price: Number(cp.price),
+        updatedAt: cp.updated_at || '',
+      }));
+
+      // Promoções
+      const promotions: Promotion[] = (promotionsRes.data || []).map((p: any) => ({
+        id: p.id,
+        customerId: p.customer_id,
+        productId: p.product_id,
+        promotionalPrice: Number(p.promotional_price),
+        startDate: p.start_date,
+        endDate: p.end_date,
+        minQuantity: Number(p.min_quantity || 1),
+        notes: p.notes || undefined,
+        active: !!p.active,
+      }));
+
+      // Vasilhames
+      const crates: CrateRecord[] = (cratesRes.data || []).map((cr: any) => ({
+        id: cr.id,
+        customerId: cr.customer_id,
+        customerName: cr.customer_name,
+        orderId: cr.order_id || undefined,
+        deliveryId: cr.delivery_id || undefined,
+        type: cr.type,
+        sent: Number(cr.sent),
+        returned: Number(cr.returned),
+        balance: Number(cr.balance),
+        date: cr.date,
+        notes: cr.notes || undefined,
+      }));
+
+      return { orders, deliveries, products, customers, receivables, customPrices, promotions, crates };
     } catch {
       return empty;
     }
@@ -366,5 +412,137 @@ export const liveSync = {
     const client = getSupabaseClient();
     if (!client) return;
     await client.from('notifications').update({ read: true }).eq('id', id);
+  },
+
+  // ----------------------------------------------------------
+  // PUSH — cadastros do operador (clientes, produtos, preços, promoções, vasilhames)
+  // ----------------------------------------------------------
+  pushCustomer: async (c: Customer): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('customers').upsert({
+        id: c.id,
+        name: c.name,
+        trade_name: c.tradeName || null,
+        document: c.document || '',
+        phone: c.phone || '',
+        whatsapp: c.whatsapp || '',
+        street: c.address?.street || 'A informar',
+        number: c.address?.number || 'S/N',
+        neighborhood: c.address?.neighborhood || 'A informar',
+        city: c.address?.city || 'A informar',
+        state: c.address?.state || 'SP',
+        zip_code: c.address?.zipCode || '',
+        reference: c.address?.reference || null,
+        status: c.status || 'active',
+        payment_method: c.paymentMethod || 'pix',
+        payment_term: c.paymentTerm || 'vista',
+        credit_limit: c.creditLimit ?? 0,
+        commercial_condition: c.commercialCondition || '',
+        notes: c.notes || null,
+      });
+    } catch {
+      // silencioso
+    }
+  },
+
+  pushProduct: async (p: Product): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('products').upsert({
+        id: p.id,
+        name: p.name,
+        category: p.category,
+        unit: p.unit,
+        sales_type: p.salesType,
+        default_price: p.defaultPrice,
+        avg_cost: p.avgCost ?? 0,
+        origin: p.origin || null,
+        notes: p.notes || null,
+        status: p.status || 'active',
+      });
+    } catch {
+      // silencioso
+    }
+  },
+
+  pushCustomPrice: async (cp: CustomPrice): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('custom_prices').upsert({
+        id: cp.id,
+        customer_id: cp.customerId,
+        product_id: cp.productId,
+        price: cp.price,
+        updated_at: cp.updatedAt || new Date().toISOString().split('T')[0],
+      });
+    } catch {
+      // silencioso
+    }
+  },
+
+  deleteCustomPrice: async (id: string): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('custom_prices').delete().eq('id', id);
+    } catch {
+      // silencioso
+    }
+  },
+
+  pushPromotion: async (p: Promotion): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('promotions').upsert({
+        id: p.id,
+        customer_id: p.customerId,
+        product_id: p.productId,
+        promotional_price: p.promotionalPrice,
+        start_date: p.startDate,
+        end_date: p.endDate,
+        min_quantity: p.minQuantity ?? 1,
+        notes: p.notes || null,
+        active: p.active,
+      });
+    } catch {
+      // silencioso
+    }
+  },
+
+  updatePromotion: async (id: string, active: boolean): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('promotions').update({ active }).eq('id', id);
+    } catch {
+      // silencioso
+    }
+  },
+
+  pushCrate: async (cr: CrateRecord): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('crates').upsert({
+        id: cr.id,
+        customer_id: cr.customerId,
+        customer_name: cr.customerName,
+        order_id: cr.orderId || null,
+        delivery_id: cr.deliveryId || null,
+        type: cr.type,
+        sent: cr.sent,
+        returned: cr.returned,
+        balance: cr.balance,
+        date: cr.date,
+        notes: cr.notes || null,
+      });
+    } catch {
+      // silencioso
+    }
   },
 };
