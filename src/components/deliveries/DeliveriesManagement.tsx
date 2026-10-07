@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Truck,
   MapPin,
@@ -10,17 +10,40 @@ import {
   Smartphone,
   Layers,
   Search,
+  UserCog,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { getSupabaseClient } from '../../lib/supabase';
 import { Delivery, DeliveryStatus } from '../../types';
 import { formatDate, getDeliveryStatusBadge } from '../../utils/formatters';
 
+interface DriverProfile {
+  id: string;
+  full_name: string | null;
+  driver_name: string | null;
+}
+
 export const DeliveriesManagement: React.FC = () => {
-  const { deliveries, updateDeliveryStatus, setCurrentTab } = useApp();
+  const { deliveries, updateDeliveryStatus, setDeliveryAssignment, setCurrentTab } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [driverFilter, setDriverFilter] = useState<string>('all');
+  const [driverProfiles, setDriverProfiles] = useState<DriverProfile[]>([]);
+
+  // Carrega entregadores cadastrados (perfis autenticados)
+  useEffect(() => {
+    (async () => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { data } = await client
+        .from('app_profiles')
+        .select('id, full_name, driver_name')
+        .eq('role', 'entregador')
+        .eq('status', 'ativo');
+      if (data) setDriverProfiles(data as any);
+    })();
+  }, [deliveries.length]);
 
   const filteredDeliveries = deliveries.filter((d) => {
     const matchesSearch =
@@ -226,8 +249,32 @@ export const DeliveriesManagement: React.FC = () => {
                   )}
                 </div>
 
+                {/* Delegar entregador */}
+                <div className="mt-4 pt-3 border-t border-gray-100">
+                  <label className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-gray-400">
+                    <UserCog className="h-3 w-3" /> Delegar para entregador
+                  </label>
+                  <select
+                    value={del.assignedDriverId || ''}
+                    onChange={(e) => {
+                      const selected = driverProfiles.find((p) => p.id === e.target.value);
+                      if (selected) {
+                        setDeliveryAssignment(del.id, selected.id, selected.driver_name || selected.full_name || 'Entregador');
+                      }
+                    }}
+                    className="mt-1 w-full rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-xs font-bold text-gray-800 focus:outline-hidden"
+                  >
+                    <option value="">— Sem entregador designado —</option>
+                    {driverProfiles.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.driver_name || p.full_name || p.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 {/* Status Switcher Actions */}
-                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
+                <div className="mt-2 pt-3 border-t border-gray-100 flex items-center justify-between gap-2">
                   <span className="text-[10px] font-bold uppercase text-gray-400">Mudar Status:</span>
                   <select
                     value={del.status}

@@ -1,5 +1,20 @@
 export type UserRole = 'admin' | 'operator' | 'driver' | 'accountant';
 
+// Perfis de acesso real (Supabase Auth)
+export type AppRole = 'master' | 'operador' | 'entregador' | 'comprador';
+
+export interface AppProfile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  role: AppRole;
+  customer_id: string | null;
+  driver_name: string | null;
+  status: 'ativo' | 'pendente' | 'bloqueado';
+  created_by: string | null;
+  created_at: string;
+}
+
 export interface CustomerAddress {
   street: string;
   number: string;
@@ -154,6 +169,8 @@ export interface Delivery {
   driverNotes?: string;
   notes?: string;
   completedAt?: string;
+  assignedDriverId?: string;
+  routeOrder?: number;
 }
 
 export interface CrateRecord {

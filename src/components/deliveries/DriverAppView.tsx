@@ -15,11 +15,13 @@ import {
   X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { Delivery } from '../../types';
 import { formatBRL, formatUnit, getDeliveryStatusBadge } from '../../utils/formatters';
 
 export const DriverAppView: React.FC = () => {
   const { deliveries, updateDeliveryStatus, confirmDelivery, customers } = useApp();
+  const { profile, supportCustomer } = useAuth();
 
   const [activeDelivery, setActiveDelivery] = useState<Delivery | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -34,9 +36,26 @@ export const DriverAppView: React.FC = () => {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
+  // Entregador autenticado vê apenas as entregas delegadas a ele
+  const isDriverProfile = profile?.role === 'entregador' && !supportCustomer;
+
   // Active driver deliveries (show all active, prioritized by today)
-  const driverDeliveries = deliveries.filter((d) => d.status !== 'entregue');
-  const finishedToday = deliveries.filter((d) => d.status === 'entregue');
+  const driverDeliveries = deliveries.filter((d) => {
+    if (d.status === 'entregue') return false;
+    if (!isDriverProfile) return true;
+    return (
+      d.assignedDriverId === profile?.id ||
+      (!!profile?.driver_name && d.driverName === profile.driver_name)
+    );
+  });
+  const finishedToday = deliveries.filter((d) => {
+    if (d.status !== 'entregue') return false;
+    if (!isDriverProfile) return true;
+    return (
+      d.assignedDriverId === profile?.id ||
+      (!!profile?.driver_name && d.driverName === profile.driver_name)
+    );
+  });
 
   // Automatic Net Weight Calculation: Peso Líquido = Peso Bruto - Tara (PRD §20)
   const numGross = parseFloat(grossWeight) || 0;

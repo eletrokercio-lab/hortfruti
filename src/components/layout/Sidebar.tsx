@@ -20,16 +20,21 @@ import {
   TrendingUp,
   Receipt,
   Wallet,
+  ShieldCheck,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface SidebarProps {
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+  supportMode?: boolean;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile, supportMode }) => {
   const { currentTab, setCurrentTab, userRole, setIsAssistantOpen } = useApp();
+  const { profile } = useAuth();
+  const isMaster = profile?.role === 'master' && !supportMode;
 
   const handleNav = (tabId: string) => {
     setCurrentTab(tabId);
@@ -190,6 +195,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
               </button>
             </div>
 
+            {/* Painel Master: Usuários & Acessos */}
+            {isMaster && (
+              <div>
+                <button
+                  onClick={() => handleNav('users')}
+                  className={navItemClass('users')}
+                >
+                  <ShieldCheck className="h-4 w-4 text-gray-900" />
+                  <span>Usuários & Acessos (Master)</span>
+                </button>
+              </div>
+            )}
+
             {/* Operação */}
             <div className="space-y-1">
               <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">Operação</p>
@@ -286,25 +304,27 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
               </button>
             </div>
 
-            {/* Gestão & Contabilidade */}
-            <div className="space-y-1">
-              <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">Contábil & Relatórios</p>
-              <button
-                onClick={() => handleNav('accountant')}
-                className={navItemClass('accountant')}
-              >
-                <FileCheck2 className="h-4 w-4 text-purple-600" />
-                <span>Central do Contador</span>
-              </button>
+            {/* Gestão & Contabilidade (somente Master) */}
+            {isMaster && (
+              <div className="space-y-1">
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">Contábil & Relatórios</p>
+                <button
+                  onClick={() => handleNav('accountant')}
+                  className={navItemClass('accountant')}
+                >
+                  <FileCheck2 className="h-4 w-4 text-purple-600" />
+                  <span>Central do Contador</span>
+                </button>
 
-              <button
-                onClick={() => handleNav('reports')}
-                className={navItemClass('reports')}
-              >
-                <FileSpreadsheet className="h-4 w-4" />
-                <span>Relatórios Gerenciais</span>
-              </button>
-            </div>
+                <button
+                  onClick={() => handleNav('reports')}
+                  className={navItemClass('reports')}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  <span>Relatórios Gerenciais</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Bottom Actions: AI & Settings */}
@@ -320,13 +340,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
               <ChevronRight className="h-3 w-3" />
             </button>
 
-            <button
-              onClick={() => handleNav('settings')}
-              className={navItemClass('settings')}
-            >
-              <Settings className="h-4 w-4" />
-              <span>Configurações & Backup</span>
-            </button>
+            {isMaster && (
+              <button
+                onClick={() => handleNav('settings')}
+                className={navItemClass('settings')}
+              >
+                <Settings className="h-4 w-4" />
+                <span>Configurações & Backup</span>
+              </button>
+            )}
           </div>
         </div>
       </aside>

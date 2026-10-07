@@ -4,14 +4,14 @@ import {
   Search,
   Bell,
   Menu,
-  UserCheck,
   Check,
   ChevronDown,
   Trash2,
   Download,
+  LogOut,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { UserRole } from '../../types';
+import { useAuth } from '../../context/AuthContext';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -20,18 +20,25 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }) => {
   const {
-    userRole,
-    setUserRole,
     setIsAssistantOpen,
     notifications,
     markNotificationAsRead,
     clearAllNotifications,
     setCurrentTab,
   } = useApp();
+  const { profile, signOut } = useAuth();
 
-  const [showRoleMenu, setShowRoleMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const isMaster = profile?.role === 'master';
+
+  const roleBadge: Record<string, { title: string; color: string }> = {
+    master: { title: 'Master · Suporte', color: 'bg-gray-900 text-white' },
+    operador: { title: 'Cliente Master · Operação', color: 'bg-emerald-600 text-white' },
+    entregador: { title: 'Entregador', color: 'bg-amber-600 text-white' },
+    comprador: { title: 'Comprador', color: 'bg-blue-600 text-white' },
+  };
+  const badge = roleBadge[profile?.role || 'operador'] || roleBadge.operador;
 
   const handleDownloadZip = async () => {
     setIsDownloading(true);
@@ -56,29 +63,6 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
   };
 
   const unreadNotifications = notifications.filter((n) => !n.read);
-
-  const roleLabels: Record<UserRole, { title: string; subtitle: string; color: string }> = {
-    admin: {
-      title: 'Proprietário',
-      subtitle: 'Acesso total',
-      color: 'bg-emerald-600 text-white',
-    },
-    operator: {
-      title: 'Operador',
-      subtitle: 'Rotina diária',
-      color: 'bg-blue-600 text-white',
-    },
-    driver: {
-      title: 'Motorista',
-      subtitle: 'Entregas Mobile',
-      color: 'bg-amber-600 text-white',
-    },
-    accountant: {
-      title: 'Contador',
-      subtitle: 'Fiscal e Fechamento',
-      color: 'bg-purple-600 text-white',
-    },
-  };
 
   return (
     <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-gray-200 bg-white px-4 md:px-6 shadow-xs">
@@ -146,16 +130,18 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
           <span className="rounded-xs bg-emerald-200/80 px-1 text-[10px] text-emerald-900 font-bold">IA</span>
         </button>
 
-        {/* Download Project ZIP */}
-        <button
-          onClick={handleDownloadZip}
-          disabled={isDownloading}
-          className="hidden sm:flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-colors shadow-2xs cursor-pointer active:scale-95"
-          title="Baixar arquivos do projeto (.ZIP) para seu computador"
-        >
-          <Download className={`h-4 w-4 text-emerald-600 ${isDownloading ? 'animate-bounce' : ''}`} />
-          <span>{isDownloading ? 'Baixando...' : 'Baixar ZIP'}</span>
-        </button>
+        {/* Download Project ZIP (apenas Master) */}
+        {isMaster && (
+          <button
+            onClick={handleDownloadZip}
+            disabled={isDownloading}
+            className="hidden sm:flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white hover:bg-gray-50 px-2.5 py-1.5 text-xs font-semibold text-gray-700 transition-colors shadow-2xs cursor-pointer active:scale-95"
+            title="Baixar arquivos do projeto (.ZIP) para seu computador"
+          >
+            <Download className={`h-4 w-4 text-emerald-600 ${isDownloading ? 'animate-bounce' : ''}`} />
+            <span>{isDownloading ? 'Baixando...' : 'Baixar ZIP'}</span>
+          </button>
+        )}
 
         {/* Notifications Dropdown */}
         <div className="relative">
@@ -217,66 +203,26 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
           )}
         </div>
 
-        {/* Profile / Role Switcher (PRD §3) */}
-        <div className="relative">
-          <button
-            onClick={() => setShowRoleMenu(!showRoleMenu)}
-            className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-2.5 py-1.5 hover:bg-gray-100 transition-colors"
+        {/* Usuário autenticado + Sair */}
+        <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50/80 px-2.5 py-1.5">
+          <div
+            className={`flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold ${badge.color}`}
           >
-            <div
-              className={`flex h-6 w-6 items-center justify-center rounded-md text-xs font-bold ${roleLabels[userRole].color}`}
-            >
-              {userRole[0].toUpperCase()}
-            </div>
-            <div className="hidden text-left md:block">
-              <p className="text-xs font-bold leading-tight text-gray-900">{roleLabels[userRole].title}</p>
-              <p className="text-[10px] text-gray-500 leading-tight">{roleLabels[userRole].subtitle}</p>
-            </div>
-            <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+            {(profile?.full_name || profile?.email || 'U')[0].toUpperCase()}
+          </div>
+          <div className="hidden text-left md:block">
+            <p className="text-xs font-bold leading-tight text-gray-900">
+              {profile?.full_name || profile?.email}
+            </p>
+            <p className="text-[10px] text-gray-500 leading-tight">{badge.title}</p>
+          </div>
+          <button
+            onClick={() => signOut()}
+            className="rounded-md p-1 text-gray-400 hover:bg-gray-200 hover:text-rose-600"
+            title="Sair da conta"
+          >
+            <LogOut className="h-3.5 w-3.5" />
           </button>
-
-          {showRoleMenu && (
-            <div className="absolute right-0 mt-2 w-56 rounded-xl border border-gray-200 bg-white p-2 shadow-xl z-50">
-              <div className="border-b border-gray-100 px-3 py-2">
-                <p className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">
-                  Simular Perfil de Usuário
-                </p>
-                <p className="text-xs text-gray-500">Alterna a interface e permissões de segurança</p>
-              </div>
-
-              <div className="space-y-1 py-1">
-                {(Object.keys(roleLabels) as UserRole[]).map((roleKey) => (
-                  <button
-                    key={roleKey}
-                    onClick={() => {
-                      setUserRole(roleKey);
-                      setShowRoleMenu(false);
-                    }}
-                    className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-colors ${
-                      userRole === roleKey
-                        ? 'bg-emerald-50 text-emerald-900 font-bold'
-                        : 'text-gray-700 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      <div
-                        className={`flex h-5 w-5 items-center justify-center rounded text-[10px] font-bold ${roleLabels[roleKey].color}`}
-                      >
-                        {roleKey[0].toUpperCase()}
-                      </div>
-                      <div className="text-left">
-                        <div>{roleLabels[roleKey].title}</div>
-                        <div className="text-[10px] text-gray-400 font-normal">
-                          {roleLabels[roleKey].subtitle}
-                        </div>
-                      </div>
-                    </div>
-                    {userRole === roleKey && <Check className="h-4 w-4 text-emerald-600" />}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
     </header>

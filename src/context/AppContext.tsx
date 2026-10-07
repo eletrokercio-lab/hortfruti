@@ -108,6 +108,7 @@ interface AppContextType {
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
 
   updateDeliveryStatus: (deliveryId: string, status: DeliveryStatus) => void;
+  setDeliveryAssignment: (deliveryId: string, driverProfileId: string, driverName: string) => void;
   confirmDelivery: (
     deliveryId: string,
     data: {
@@ -266,6 +267,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const saved = localStorage.getItem('hg_ai_logs');
     return saved ? JSON.parse(saved) : INITIAL_AI_LOGS;
   });
+
+  // Sincronização em tempo real: dados do Supabase sobrepõem o cache local
+  useEffect(() => {
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      if (!liveSync.isAvailable()) return;
+      const remote = await liveSync.pullAll();
+      if (remote.products.length > 0) setProducts(remote.products);
+      if (remote.customers.length > 0) setCustomers(remote.customers);
+      if (remote.orders.length > 0) setOrders(remote.orders);
+      if (remote.deliveries.length > 0) setDeliveries(remote.deliveries);
+      if (remote.receivables.length > 0) setReceivables(remote.receivables);
+    })();
+  }, []);
 
   // Save to localStorage
   useEffect(() => {
@@ -567,11 +582,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setNotifications((prev) => [newNotif, ...prev]);
 
+    // Persistir no Supabase (silencioso; o app continua funcionando offline)
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushOrder(newOrder, newDelivery, newReceivable);
+    })();
+
     return newOrder;
   };
 
   const updateOrderStatus = (orderId: string, status: Order['status']) => {
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
+
+    // Persistir no Supabase
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushOrderStatus(orderId, status);
+    })();
 
     // Synchronize delivery status
     setDeliveries((prev) =>
@@ -593,6 +620,30 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDeliveries((prev) =>
       prev.map((d) => (d.id === deliveryId ? { ...d, status } : d))
     );
+  };
+
+  // Delegar entrega a um entregador (perfil autenticado)
+  const setDeliveryAssignment = (deliveryId: string, driverProfileId: string, driverName: string) => {
+    setDeliveries((prev) =>
+      prev.map((d) =>
+        d.id === deliveryId ? { ...d, assignedDriverId: driverProfileId, driverName } : d
+      )
+    );
+
+    // Persistir no Supabase (silencioso; o cache local continua funcionando)
+    (async () => {
+      try {
+        const { getSupabaseClient } = await import('../lib/supabase');
+        const client = getSupabaseClient();
+        if (!client) return;
+        await client
+          .from('deliveries')
+          .update({ assigned_driver_id: driverProfileId, driver_name: driverName })
+          .eq('id', deliveryId);
+      } catch {
+        // fallback: permanece somente local
+      }
+    })();
   };
 
   // Action: Confirm Delivery with tare/net weight and crate balance updates (PRD §18, §19, §20)
@@ -672,6 +723,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       setCrates((prev) => [crateEntry, ...prev]);
     }
+
+    // Persistir no Supabase
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.pushDeliveryStatus(deliveryId, data.issueReport ? 'problema' : 'entregue', {
+        grossWeight: data.grossWeight,
+        tareWeight: data.tareWeight,
+        netWeight,
+        cratesReturned: data.cratesReturned,
+        issueReport: data.issueReport,
+        driverNotes: data.driverNotes,
+      });
+      if (delivery.orderId) {
+        await liveSync.pushOrderStatus(delivery.orderId, data.issueReport ? 'em_rota' : 'entregue');
+      }
+    })();
   };
 
   // Customer Management
@@ -1049,6 +1116,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createOrder,
         updateOrderStatus,
         updateDeliveryStatus,
+        setDeliveryAssignment,
         confirmDelivery,
 
         createCustomer,

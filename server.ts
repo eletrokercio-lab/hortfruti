@@ -97,6 +97,236 @@ app.post('/api/github/verify', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================================
+// API: Administração de usuários (exclusivo do perfil MASTER)
+// Usa a SUPABASE_SERVICE_ROLE_KEY (somente servidor, via Secrets)
+// ============================================================
+const SUPABASE_URL = process.env.SUPABASE_URL || 'https://trhhqnwmezzihbldqmls.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+const validRoles = ['master', 'operador', 'entregador', 'comprador'];
+
+async function requireMaster(req: Request): Promise<{ ok: boolean; error?: string; userId?: string }> {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    return { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY não configurada no servidor. Adicione em My app > Secrets.' };
+  }
+  const token = (req.headers.authorization || '').replace(/^Bearer /i, '').trim();
+  if (!token) {
+    return { ok: false, error: 'Autenticação necessária.' };
+  }
+  try {
+    const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` },
+    });
+    if (!userRes.ok) return { ok: false, error: 'Sessão inválida ou expirada.' };
+    const user: any = await userRes.json();
+
+    const profRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${user.id}&select=role,status`,
+      { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY } }
+    );
+    const profiles = await profRes.json();
+    if (!Array.isArray(profiles) || profiles.length === 0) {
+      return { ok: false, error: 'Perfil não encontrado.' };
+    }
+    if (profiles[0].role !== 'master') {
+      return { ok: false, error: 'Apenas o perfil Master pode administrar usuários.' };
+    }
+    return { ok: true, userId: user.id };
+  } catch (err: any) {
+    return { ok: false, error: 'Falha ao validar permissões: ' + err.message };
+  }
+}
+
+const serviceHeaders = {
+  apikey: SUPABASE_SERVICE_ROLE_KEY,
+  Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+  'Content-Type': 'application/json',
+};
+
+// POST /api/admin/bootstrap — cria a PRIMEIRA conta Master do sistema.
+// Só funciona enquanto nenhuma conta Master existir (uso único).
+app.post('/api/admin/bootstrap', async (_req: Request, res: Response) => {
+  if (!SUPABASE_SERVICE_ROLE_KEY) {
+    res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY não configurada no servidor (My app > Secrets).' });
+    return;
+  }
+  try {
+    // Verifica se já existe master
+    const check = await fetch(
+      `${SUPABASE_URL}/rest/v1/app_profiles?role=eq.master&select=id&limit=1`,
+      { headers: serviceHeaders }
+    );
+    const existing = await check.json();
+    if (Array.isArray(existing) && existing.length > 0) {
+      res.status(403).json({ error: 'Já existe uma conta Master. Use o Painel Master para criar outras contas.' });
+      return;
+    }
+
+    const { email, password, fullName } = _req.body || {};
+    if (!email || !password || password.length < 6) {
+      res.status(400).json({ error: 'Informe e-mail e senha (mínimo 6 caracteres).' });
+      return;
+    }
+
+    const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+      method: 'POST',
+      headers: serviceHeaders,
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: fullName || 'Master', role: 'master' },
+      }),
+    });
+    if (!createRes.ok) {
+      const err: any = await createRes.json().catch(() => ({}));
+      res.status(400).json({ error: err.msg || err.message || 'Falha ao criar usuário no Supabase Auth.' });
+      return;
+    }
+    const created: any = await createRes.json();
+
+    await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${created.id}`, {
+      method: 'PATCH',
+      headers: serviceHeaders,
+      body: JSON.stringify({ role: 'master', full_name: fullName || 'Master', status: 'ativo' }),
+    });
+
+    res.json({ success: true, message: `Conta Master criada para ${created.email}. Faça login no app.` });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erro no bootstrap: ' + err.message });
+  }
+});
+
+// GET /api/admin/users — lista todos os perfis
+app.get('/api/admin/users', async (req: Request, res: Response) => {
+  const gate = await requireMaster(req);
+  if (!gate.ok) {
+    res.status(403).json({ error: gate.error });
+    return;
+  }
+  try {
+    const listRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/app_profiles?select=*&order=created_at.desc`,
+      { headers: serviceHeaders }
+    );
+    const profiles = await listRes.json();
+    res.json({ success: true, profiles: Array.isArray(profiles) ? profiles : [] });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erro ao listar usuários: ' + err.message });
+  }
+});
+
+// POST /api/admin/users — cria conta (cliente master, entregador, operador ou comprador)
+app.post('/api/admin/users', async (req: Request, res: Response) => {
+  const gate = await requireMaster(req);
+  if (!gate.ok) {
+    res.status(403).json({ error: gate.error });
+    return;
+  }
+  try {
+    const { email, password, fullName, role, customerId, driverName } = req.body;
+
+    if (!email || !password || !role || !validRoles.includes(role)) {
+      res.status(400).json({ error: 'Informe e-mail, senha e um papel válido (master, operador, entregador ou comprador).' });
+      return;
+    }
+    if (password.length < 6) {
+      res.status(400).json({ error: 'A senha deve ter pelo menos 6 caracteres.' });
+      return;
+    }
+
+    // 1. Cria o usuário no Auth (confirmado, sem convite por e-mail)
+    const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
+      method: 'POST',
+      headers: serviceHeaders,
+      body: JSON.stringify({
+        email: email.trim().toLowerCase(),
+        password,
+        email_confirm: true,
+        user_metadata: { full_name: fullName || '', role },
+      }),
+    });
+
+    if (!createRes.ok) {
+      const createErr: any = await createRes.json().catch(() => ({}));
+      const msg = createErr.msg || createErr.message || 'Falha ao criar usuário no Supabase Auth.';
+      res.status(400).json({ error: msg });
+      return;
+    }
+    const createdUser: any = await createRes.json();
+
+    // 2. Atualiza o perfil criado pelo trigger com os dados completos
+    const profilePatch: Record<string, any> = {
+      role,
+      full_name: fullName || '',
+      status: 'ativo',
+    };
+    if (customerId) profilePatch.customer_id = customerId;
+    if (driverName) profilePatch.driver_name = driverName;
+
+    await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${createdUser.id}`, {
+      method: 'PATCH',
+      headers: serviceHeaders,
+      body: JSON.stringify(profilePatch),
+    });
+
+    res.json({
+      success: true,
+      userId: createdUser.id,
+      email: createdUser.email,
+      role,
+      message: `Conta de ${role} criada com sucesso para ${createdUser.email}.`,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erro ao criar usuário: ' + err.message });
+  }
+});
+
+// PATCH /api/admin/users — aprovar (pendente->ativo), bloquear ou reativar
+app.patch('/api/admin/users', async (req: Request, res: Response) => {
+  const gate = await requireMaster(req);
+  if (!gate.ok) {
+    res.status(403).json({ error: gate.error });
+    return;
+  }
+  try {
+    const { userId, status } = req.body;
+    if (!userId || !['ativo', 'pendente', 'bloqueado'].includes(status)) {
+      res.status(400).json({ error: 'Informe userId e status válido (ativo, pendente ou bloqueado).' });
+      return;
+    }
+    const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${userId}`, {
+      method: 'PATCH',
+      headers: serviceHeaders,
+      body: JSON.stringify({ status }),
+    });
+    if (!patchRes.ok) {
+      res.status(400).json({ error: 'Falha ao atualizar o perfil do usuário.' });
+      return;
+    }
+
+    // Bloquear também impede o login no Auth
+    if (status === 'bloqueado') {
+      await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: serviceHeaders,
+        body: JSON.stringify({ ban_duration: '876000h' }),
+      });
+    } else {
+      await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: serviceHeaders,
+        body: JSON.stringify({ ban_duration: 'none' }),
+      });
+    }
+
+    res.json({ success: true, message: `Usuário atualizado para "${status}".` });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Erro ao atualizar usuário: ' + err.message });
+  }
+});
+
 // API: Sync and Push Code directly to GitHub repository
 app.post('/api/github/push', async (req: Request, res: Response) => {
   try {
