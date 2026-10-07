@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { playNotificationSound, isSelfNotification, markNotificationSeen } from '../utils/notify';
 import {
   UserRole,
   Customer,
@@ -285,11 +286,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Notificações remotas (staff): pull inicial + atualização a cada 45s
   useEffect(() => {
     let cancelled = false;
+    const seenIds = new Set<string>();
+    let firstSync = true;
     const syncNotifications = async () => {
       const { liveSync } = await import('../services/liveSync');
       if (!liveSync.isAvailable()) return;
       const remoteNotifs = await liveSync.pullNotifications('operador');
       if (cancelled || remoteNotifs.length === 0) return;
+      // Alerta sonoro para notificações novas vindas de outros aparelhos
+      const fresh = remoteNotifs.filter((n) => !seenIds.has(n.id) && !isSelfNotification(n.id));
+      if (!firstSync && fresh.length > 0) playNotificationSound();
+      firstSync = false;
+      for (const n of fresh) seenIds.add(n.id);
+      for (const n of remoteNotifs) seenIds.add(n.id);
       setNotifications((prev) => {
         const remoteIds = new Set(remoteNotifs.map((n) => n.id));
         const locals = prev.filter((n) => !remoteIds.has(n.id));
@@ -621,9 +630,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Persistir no Supabase (silencioso; o app continua funcionando offline)
     (async () => {
       const { liveSync } = await import('../services/liveSync');
+      const notifId = genNotificationId();
+      markNotificationSeen(notifId);
       await liveSync.pushOrder(newOrder, newDelivery, newReceivable);
       await liveSync.pushNotification({
-        id: genNotificationId(),
+        id: notifId,
         audience: 'operador',
         type: 'order',
         title: 'Novo Pedido Criado',
@@ -688,6 +699,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (info) {
         const idOp = genNotificationId();
         const idBuyer = genNotificationId();
+        markNotificationSeen(idOp);
+        markNotificationSeen(idBuyer);
         setNotifications((prev) => [
           {
             id: idOp,
@@ -769,6 +782,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const idOp = genNotificationId();
     const idBuyer = genNotificationId();
+    markNotificationSeen(idOp);
+    markNotificationSeen(idBuyer);
 
     setNotifications((prev) => [
       {

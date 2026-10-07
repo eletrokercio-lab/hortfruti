@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ShoppingBasket,
   Package,
@@ -24,6 +24,7 @@ import {
   Bell,
 } from 'lucide-react';
 import { getSupabaseClient } from '../../lib/supabase';
+import { playNotificationSound } from '../../utils/notify';
 import type {
   Product,
   ProductCategory,
@@ -116,6 +117,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   }
   const [notifs, setNotifs] = useState<BuyerNotification[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
+  const lastUnread = useRef(-1);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,7 +132,14 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
           .eq('customer_id', customerId)
           .order('created_at', { ascending: false })
           .limit(30);
-        if (!error && !cancelled && data) setNotifs(data as BuyerNotification[]);
+        if (!error && !cancelled && data) {
+          const list = data as BuyerNotification[];
+          // Alerta sonoro quando chega notificação nova
+          const unread = list.filter((n) => !n.read).length;
+          if (lastUnread.current >= 0 && unread > lastUnread.current) playNotificationSound();
+          lastUnread.current = unread;
+          setNotifs(list);
+        }
       } catch {
         // sem conexão: mantém as últimas carregadas
       }
