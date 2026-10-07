@@ -202,7 +202,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
 
       {/* Order Detail Modal */}
       <OrderDetailModal
-        order={selectedOrder}
+        order={selectedOrder ? orders.find((o) => o.id === selectedOrder.id) || selectedOrder : null}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
       />

@@ -636,6 +636,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const updateOrderStatus = (orderId: string, status: Order['status']) => {
+    const order = orders.find((o) => o.id === orderId);
     setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, status } : o)));
 
     // Persistir no Supabase
@@ -658,6 +659,68 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return d;
       })
     );
+
+    // Notificar comprador + operador sobre a mudança de status do pedido
+    if (order && status !== 'pendente') {
+      const statusInfo: Record<string, { title: string; msgBuyer: string; msgOp: string }> = {
+        em_separacao: {
+          title: 'Pedido em separação',
+          msgBuyer: `Seu pedido ${order.orderNumber} está sendo separado.`,
+          msgOp: `Pedido ${order.orderNumber} (${order.customerName}) entrou em separação.`,
+        },
+        pronto: {
+          title: 'Pedido pronto',
+          msgBuyer: `Seu pedido ${order.orderNumber} está pronto e aguarda a entrega.`,
+          msgOp: `Pedido ${order.orderNumber} (${order.customerName}) pronto para carregamento.`,
+        },
+        em_rota: {
+          title: 'Pedido em rota',
+          msgBuyer: `Seu pedido ${order.orderNumber} saiu para entrega.`,
+          msgOp: `Pedido ${order.orderNumber} (${order.customerName}) em rota de entrega.`,
+        },
+        entregue: {
+          title: 'Pedido entregue',
+          msgBuyer: `Seu pedido ${order.orderNumber} foi entregue. Bom aproveito!`,
+          msgOp: `Pedido ${order.orderNumber} (${order.customerName}) entregue.`,
+        },
+      };
+      const info = statusInfo[status];
+      if (info) {
+        const idOp = genNotificationId();
+        const idBuyer = genNotificationId();
+        setNotifications((prev) => [
+          {
+            id: idOp,
+            type: 'order',
+            title: info.title,
+            message: info.msgOp,
+            date: 'Agora mesmo',
+            read: false,
+            actionTab: 'orders',
+          },
+          ...prev,
+        ]);
+        (async () => {
+          const { liveSync } = await import('../services/liveSync');
+          await liveSync.pushNotification({
+            id: idOp,
+            audience: 'operador',
+            type: 'order',
+            title: info.title,
+            message: info.msgOp,
+            actionTab: 'orders',
+          });
+          await liveSync.pushNotification({
+            id: idBuyer,
+            audience: 'comprador',
+            customerId: order.customerId,
+            type: 'order',
+            title: info.title,
+            message: info.msgBuyer,
+          });
+        })();
+      }
+    }
   };
 
   const updateDeliveryStatus = (deliveryId: string, status: DeliveryStatus) => {
