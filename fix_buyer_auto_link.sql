@@ -76,7 +76,7 @@ BEGIN
     FROM public.app_profiles
     WHERE role = 'comprador' AND customer_id IS NULL
   LOOP
-    v_cid := 'cust-' || UPPER(SUBSTRING(REPLACE(r.id, '-', ''), 1, 8));
+    v_cid := 'cust-' || UPPER(SUBSTRING(REPLACE(r.id::text, '-', ''), 1, 8));
     INSERT INTO public.customers (id, name, document, phone, street, number, neighborhood, city, status, payment_method, payment_term, commercial_condition, notes)
     VALUES (
       v_cid,
