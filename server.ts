@@ -494,9 +494,9 @@ ${JSON.stringify(systemContext || {}, null, 2)}
           },
         });
 
-        // 6-second timeout fallback to ensure snappy responsiveness
+        // Timeout generoso: o Gemini pode demorar na primeira chamada (cold start)
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de resposta da API')), 6000)
+          setTimeout(() => reject(new Error('Timeout de resposta da API')), 60000)
         );
 
         const response: any = await Promise.race([geminiPromise, timeoutPromise]);
@@ -535,6 +535,7 @@ ${JSON.stringify(systemContext || {}, null, 2)}
         res.json({
           answer: answerText,
           suggestedAction,
+          source: 'gemini',
           timestamp: new Date().toISOString(),
         });
         return;
@@ -613,12 +614,13 @@ ${JSON.stringify(systemContext || {}, null, 2)}
         tab: 'accountant',
       };
     } else {
-      fallbackAnswer = `Olá! Como posso ajudar na operação hoje?\nVocê pode me perguntar:\n• "O que preciso comprar hoje?"\n• "O que preciso colher?"\n• "Quem está devendo?"\n• "Quais entregas faltam?"\n• "Como estão as vendas do dia?"`;
+      fallbackAnswer = `⚠️ Modo limitado: a IA (Gemini) não respondeu a tempo, então recebi apenas um resumo básico do sistema.\n\nVocê pode me perguntar:\n• "O que preciso comprar hoje?"\n• "O que preciso colher?"\n• "Quem está devendo?"\n• "Quais entregas faltam?"\n• "Como estão as vendas do dia?"\n\nOu tente novamente em instantes para falar com a IA de verdade.`;
     }
 
     res.json({
       answer: fallbackAnswer,
       suggestedAction,
+      source: 'local-fallback',
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
@@ -676,7 +678,7 @@ Retorne um JSON exatamente no formato:
         });
 
         const timeoutPromise = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Timeout de parsing da API')), 6000)
+          setTimeout(() => reject(new Error('Timeout de parsing da API')), 60000)
         );
 
         const response: any = await Promise.race([geminiPromise, timeoutPromise]);
