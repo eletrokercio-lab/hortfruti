@@ -26,6 +26,7 @@ export const ProductsView: React.FC = () => {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [quickSearch, setQuickSearch] = useState('');
   const [quickOpen, setQuickOpen] = useState(false);
+  const [showPhotoReview, setShowPhotoReview] = useState(false);
 
   // Form State
   const [name, setName] = useState('');
@@ -188,6 +189,18 @@ export const ProductsView: React.FC = () => {
     outros: '📦',
   };
 
+  const CATEGORY_LABELS: Record<string, string> = {
+    frutas: 'Frutas',
+    legumes: 'Legumes',
+    verduras: 'Verduras',
+    folhagens: 'Folhagens',
+    temperos: 'Temperos',
+    tuberculos: 'Tubérculos',
+    outros: 'Outros',
+  };
+
+  const categoryLabel = (c: string) => CATEGORY_LABELS[c] || c;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name) return;
@@ -237,13 +250,22 @@ export const ProductsView: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenNew}
-          className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
-        >
-          <Plus className="h-4 w-4" />
-          <span>Novo Produto</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowPhotoReview(true)}
+            className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-800 shadow-sm transition-all active:scale-95"
+          >
+            <ImageIcon className="h-4 w-4" />
+            <span>Conferir Fotos</span>
+          </button>
+          <button
+            onClick={handleOpenNew}
+            className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Novo Produto</span>
+          </button>
+        </div>
       </div>
 
       {/* Filter and Search Bar */}
@@ -415,6 +437,67 @@ export const ProductsView: React.FC = () => {
       </div>
 
       {/* Modal: Create or Edit Product */}
+      {/* Conferência de fotos: todas de uma vez; toque para corrigir */}
+      {showPhotoReview && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/60 backdrop-blur-xs animate-in fade-in duration-100">
+          <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-3 shadow-sm">
+            <div>
+              <p className="text-sm font-black text-gray-900 flex items-center gap-2">
+                <ImageIcon className="h-4 w-4 text-emerald-600" />
+                Conferência de Fotos
+              </p>
+              <p className="text-[11px] text-gray-500">
+                Toque em uma foto para abrir o produto e trocar a imagem
+              </p>
+            </div>
+            <button
+              onClick={() => setShowPhotoReview(false)}
+              className="rounded-full bg-gray-100 p-2 text-gray-500 hover:bg-gray-200"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+              {[...products]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((prod) => {
+                  const img = prod.imageUrl || getCuratedImage(prod.name);
+                  return (
+                    <button
+                      key={prod.id}
+                      onClick={() => {
+                        setShowPhotoReview(false);
+                        handleOpenEdit(prod);
+                      }}
+                      className="group overflow-hidden rounded-xl border border-gray-200 bg-white text-left shadow-2xs transition-all hover:border-emerald-400 hover:shadow-sm active:scale-95"
+                    >
+                      {img ? (
+                        <img
+                          src={img}
+                          alt={prod.name}
+                          loading="lazy"
+                          className="h-24 w-full bg-gray-50 object-cover"
+                        />
+                      ) : (
+                        <div className="flex h-24 w-full items-center justify-center bg-gray-50 text-2xl">
+                          {CATEGORY_EMOJI[prod.category] || '📦'}
+                        </div>
+                      )}
+                      <div className="px-2 py-1.5">
+                        <p className="truncate text-[11px] font-bold text-gray-900 group-hover:text-emerald-700">
+                          {prod.name}
+                        </p>
+                        <p className="text-[9px] text-gray-400">{categoryLabel(prod.category)}</p>
+                      </div>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-100">
           <div className="w-full max-w-lg rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden my-6">
