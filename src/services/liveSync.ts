@@ -153,6 +153,7 @@ export const liveSync = {
         avgCost: Number(p.avg_cost),
         origin: p.origin || '',
         notes: p.notes || undefined,
+        imageUrl: p.image_url || undefined,
         status: p.status,
       }));
 
@@ -461,6 +462,7 @@ export const liveSync = {
         avg_cost: p.avgCost ?? 0,
         origin: p.origin || null,
         notes: p.notes || null,
+        image_url: p.imageUrl || null,
         status: p.status || 'active',
       });
     } catch {

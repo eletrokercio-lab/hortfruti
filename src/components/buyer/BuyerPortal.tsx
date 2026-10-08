@@ -47,6 +47,16 @@ const categoryLabels: Record<string, string> = {
   outros: 'Outros',
 };
 
+const categoryEmoji: Record<string, string> = {
+  frutas: '🍎',
+  legumes: '🥕',
+  verduras: '🥬',
+  folhagens: '🌿',
+  temperos: '🌱',
+  tuberculos: '🥔',
+  outros: '📦',
+};
+
 const orderStatusSteps: { key: string; label: string }[] = [
   { key: 'pendente', label: 'Recebido' },
   { key: 'em_separacao', label: 'Em separação' },
@@ -196,6 +206,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
           avgCost: Number(p.avg_cost || 0),
           origin: p.origin || '',
           notes: p.notes || undefined,
+          imageUrl: p.image_url || undefined,
           status: p.status,
         }))
       );
@@ -730,6 +741,18 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                   const qty = cart[p.id] || 0;
                   return (
                     <div key={p.id} className={`rounded-xl border bg-white p-3 shadow-xs transition-all ${qty > 0 ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-gray-200'}`}>
+                      {p.imageUrl ? (
+                        <img
+                          src={p.imageUrl}
+                          alt={p.name}
+                          loading="lazy"
+                          className="mb-2 h-24 w-full rounded-lg border border-gray-100 object-cover"
+                        />
+                      ) : (
+                        <div className="mb-2 flex h-24 w-full items-center justify-center rounded-lg border border-gray-100 bg-gray-50 text-3xl">
+                          {categoryEmoji[p.category] || '🧺'}
+                        </div>
+                      )}
                       <div className="flex items-start justify-between">
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">
                           {categoryLabels[p.category] || p.category}

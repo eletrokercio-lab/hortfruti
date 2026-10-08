@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Plus,
@@ -9,10 +9,13 @@ import {
   CheckCircle2,
   X,
   TrendingUp,
+  Loader2,
+  ImageIcon,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory, ProductSalesType, ProductUnit } from '../../types';
 import { formatBRL } from '../../utils/formatters';
+import { searchProductImages, ProductImageOption } from '../../services/productImageSearch';
 
 export const ProductsView: React.FC = () => {
   const { products, createProduct, updateProduct } = useApp();
@@ -33,6 +36,28 @@ export const ProductsView: React.FC = () => {
   const [avgCost, setAvgCost] = useState<number>(30);
   const [origin, setOrigin] = useState('');
   const [notes, setNotes] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [imgOptions, setImgOptions] = useState<ProductImageOption[]>([]);
+  const [imgLoading, setImgLoading] = useState(false);
+  const [imgSearchedFor, setImgSearchedFor] = useState('');
+
+  // Busca automática de fotos enquanto o nome é digitado (debounce 700ms)
+  useEffect(() => {
+    if (!isModalOpen || name.trim().length < 3) {
+      setImgOptions([]);
+      setImgSearchedFor('');
+      return;
+    }
+    const term = name.trim();
+    const timer = setTimeout(async () => {
+      setImgLoading(true);
+      const opts = await searchProductImages(term, 4);
+      setImgOptions(opts);
+      setImgSearchedFor(term);
+      setImgLoading(false);
+    }, 700);
+    return () => clearTimeout(timer);
+  }, [name, isModalOpen]);
 
   // Hortifrutis comuns: 1 toque preenche o cadastro (só ajustar preço)
   const QUICK_CATALOG: { name: string; category: ProductCategory; unit: ProductUnit; salesType: ProductSalesType; cost: number; price: number }[] = [
@@ -110,6 +135,7 @@ export const ProductsView: React.FC = () => {
     setAvgCost(30);
     setOrigin('');
     setNotes('');
+    setImageUrl('');
     setIsModalOpen(true);
   };
 
@@ -123,6 +149,7 @@ export const ProductsView: React.FC = () => {
     setAvgCost(p.avgCost);
     setOrigin(p.origin);
     setNotes(p.notes || '');
+    setImageUrl(p.imageUrl || '');
     setIsModalOpen(true);
   };
 
@@ -136,6 +163,7 @@ export const ProductsView: React.FC = () => {
     setAvgCost(item.cost);
     setOrigin('');
     setNotes('');
+    setImageUrl('');
     setIsModalOpen(true);
   };
 
@@ -144,6 +172,16 @@ export const ProductsView: React.FC = () => {
   );
   const isAlreadyRegistered = (qName: string) =>
     products.some((p) => p.name.toLowerCase() === qName.toLowerCase());
+
+  const CATEGORY_EMOJI: Record<string, string> = {
+    frutas: '🍎',
+    legumes: '🥕',
+    verduras: '🥬',
+    folhagens: '🌿',
+    temperos: '🌱',
+    tuberculos: '🥔',
+    outros: '📦',
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -160,6 +198,7 @@ export const ProductsView: React.FC = () => {
         avgCost,
         origin,
         notes,
+        imageUrl: imageUrl || undefined,
       });
     } else {
       createProduct({
@@ -171,6 +210,7 @@ export const ProductsView: React.FC = () => {
         avgCost,
         origin,
         notes,
+        imageUrl: imageUrl || undefined,
         status: 'active',
       });
     }
@@ -321,8 +361,24 @@ export const ProductsView: React.FC = () => {
                 return (
                   <tr key={prod.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="py-3 px-4">
-                      <p className="font-bold text-gray-900">{prod.name}</p>
-                      {prod.notes && <p className="text-[10px] text-gray-400">{prod.notes}</p>}
+                      <div className="flex items-center gap-2.5">
+                        {prod.imageUrl ? (
+                          <img
+                            src={prod.imageUrl}
+                            alt={prod.name}
+                            loading="lazy"
+                            className="h-9 w-9 shrink-0 rounded-lg border border-gray-200 object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                            {CATEGORY_EMOJI[prod.category] || '📦'}
+                          </span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="font-bold text-gray-900">{prod.name}</p>
+                          {prod.notes && <p className="text-[10px] text-gray-400">{prod.notes}</p>}
+                        </div>
+                      </div>
                     </td>
                     <td className="py-3 px-4 capitalize text-gray-600">{prod.category}</td>
                     <td className="py-3 px-4 font-mono font-bold text-gray-700">{prod.unit}</td>
@@ -383,6 +439,63 @@ export const ProductsView: React.FC = () => {
                   placeholder="Ex: Tomate Italiano 1A"
                   className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
                 />
+              </div>
+
+              {/* Foto do produto: busca automática pelo nome */}
+              <div className="rounded-xl border border-gray-200 bg-gray-50/60 p-3">
+                <p className="flex items-center gap-1.5 text-xs font-bold text-gray-700 mb-2">
+                  <ImageIcon className="h-3.5 w-3.5 text-emerald-600" />
+                  Foto do Produto
+                  {imgLoading && <Loader2 className="h-3 w-3 animate-spin text-emerald-600" />}
+                </p>
+
+                {imgOptions.length > 0 ? (
+                  <div className="grid grid-cols-4 gap-2">
+                    {imgOptions.map((opt) => (
+                      <button
+                        key={opt.url}
+                        type="button"
+                        onClick={() => setImageUrl(opt.url)}
+                        title={opt.title}
+                        className={`relative h-16 overflow-hidden rounded-lg border-2 transition-all ${
+                          imageUrl === opt.url
+                            ? 'border-emerald-600 ring-2 ring-emerald-200'
+                            : 'border-transparent hover:border-emerald-300'
+                        }`}
+                      >
+                        <img src={opt.url} alt={opt.title} className="h-full w-full object-cover" loading="lazy" />
+                        {imageUrl === opt.url && (
+                          <span className="absolute bottom-0.5 right-0.5 rounded-full bg-emerald-600 p-0.5">
+                            <CheckCircle2 className="h-3 w-3 text-white" />
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  !imgLoading && name.trim().length >= 3 && (
+                    <p className="text-[11px] text-gray-400">
+                      Nenhuma foto encontrada para "{imgSearchedFor}" — você pode colar um link abaixo.
+                    </p>
+                  )
+                )}
+
+                <input
+                  type="url"
+                  value={imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder="Ou cole aqui o link de uma foto (opcional)"
+                  className="mt-2 w-full rounded-lg border border-gray-200 px-2.5 py-1.5 text-[11px] text-gray-900 focus:bg-white focus:outline-hidden"
+                />
+                {imageUrl && (
+                  <button
+                    type="button"
+                    onClick={() => setImageUrl('')}
+                    className="mt-1 text-[10px] font-bold text-rose-500 hover:underline"
+                  >
+                    Remover foto
+                  </button>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-3">

@@ -88,6 +88,7 @@ export interface Product {
   defaultSupplierId?: string;
   origin: string;
   notes?: string;
+  imageUrl?: string;
   status: 'active' | 'inactive';
 }
 
