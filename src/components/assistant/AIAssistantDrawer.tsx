@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { AIAuditLog } from '../../types';
+import { getSupabaseClient } from '../../lib/supabase';
 
 interface Message {
   id: string;
@@ -55,12 +56,34 @@ export const AIAssistantDrawer: React.FC = () => {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: 'Olá! Sou o Assistente Inteligente do HortiGestão. Posso analisar suas necessidades de compras, planejar colheitas, verificar clientes devedores, resumir entregas ou preparar dados para o contador. Como posso ajudar hoje?',
+      text: 'Olá! Sou o Assistente Inteligente do HortiGestão. Além de responder perguntas, eu EXECUTO tarefas para você: delegar entregas ao entregador, criar pedido de colheita, mudar status de pedido e registrar pagamentos — sempre pedindo sua confirmação antes. Ou me pergunte sobre compras, clientes devedores, entregas e vendas. Como posso ajudar?',
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
+  const [drivers, setDrivers] = useState<{ id: string; name: string }[]>([]);
+
+  // Entregadores cadastrados (para a IA poder delegar entregas)
+  useEffect(() => {
+    if (!isAssistantOpen) return;
+    (async () => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { data } = await client
+        .from('app_profiles')
+        .select('id, full_name, driver_name')
+        .eq('role', 'entregador')
+        .eq('status', 'ativo');
+      if (data)
+        setDrivers(
+          (data as any[]).map((d) => ({
+            id: d.id,
+            name: d.driver_name || d.full_name || 'Entregador',
+          }))
+        );
+    })();
+  }, [isAssistantOpen]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -86,12 +109,12 @@ export const AIAssistantDrawer: React.FC = () => {
   if (!isAssistantOpen) return null;
 
   const quickPrompts = [
+    'Envie as entregas pendentes para o entregador',
+    'Faça o pedido de colheita do que está faltando',
     'O que preciso comprar hoje?',
-    'O que preciso colher?',
     'Quem está devendo?',
     'Como estão as vendas do dia?',
     'Quais entregas faltam?',
-    'Preparar informações para o contador',
   ];
 
   const handleSendMessage = async (queryText?: string) => {
@@ -148,6 +171,31 @@ export const AIAssistantDrawer: React.FC = () => {
       activeDeliveriesList: deliveries
         .filter((d) => d.status !== 'entregue')
         .map((d) => ({ order: d.orderNumber, customer: d.customerName, status: d.status, driver: d.driverName })),
+      // Dados com IDs para a IA montar ações executáveis
+      pendingDeliveries: deliveries
+        .filter((d) => d.status !== 'entregue')
+        .map((d) => ({
+          deliveryId: d.id,
+          orderNumber: d.orderNumber,
+          customer: d.customerName,
+          status: d.status,
+          driverName: d.driverName || null,
+          shift: d.shift,
+          date: d.date,
+        })),
+      drivers,
+      ordersList: orders.slice(0, 40).map((o) => ({
+        orderId: o.id,
+        orderNumber: o.orderNumber,
+        customer: o.customerName,
+        status: o.status,
+        total: o.total,
+      })),
+      receivablesList: receivables
+        .filter((r) => r.status !== 'pago')
+        .slice(0, 40)
+        .map((r) => ({ receivableId: r.id, customer: r.customerName, amount: r.amount, due: r.dueDate, status: r.status })),
+      productsList: products.map((p) => ({ productId: p.id, name: p.name, unit: p.unit })),
     };
 
     try {
@@ -196,10 +244,19 @@ export const AIAssistantDrawer: React.FC = () => {
 
   const handleConfirmAction = (msgId: string, action: any) => {
     executeAISuggestion(action);
-    setMessages((prev) =>
-      prev.map((m) => (m.id === msgId ? { ...m, confirmed: true } : m))
-    );
-    setIsAssistantOpen(false);
+    const isExecute = typeof action?.type === 'string' && action.type.startsWith('EXECUTE_');
+    setMessages((prev) => [
+      ...prev.map((m) => (m.id === msgId ? { ...m, confirmed: true } : m)),
+      {
+        id: `done-${Date.now()}`,
+        sender: 'assistant' as const,
+        text: isExecute
+          ? `✅ Pronto! Ação executada: ${action.label}. Você já pode conferir na tela — ela foi aberta para você.`
+          : `Tela aberta: ${action.label}.`,
+        timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      },
+    ]);
+    if (!isExecute) setIsAssistantOpen(false);
   };
 
   return (
@@ -302,7 +359,11 @@ export const AIAssistantDrawer: React.FC = () => {
                     <div className="mt-2 rounded-xl border border-emerald-300 bg-emerald-50/90 p-2.5 text-emerald-950">
                       <div className="flex items-center gap-1.5 font-bold text-[11px] text-emerald-900 mb-1">
                         <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
-                        <span>Ação Operacional Sugerida:</span>
+                        <span>
+                          {msg.suggestedAction.type?.startsWith('EXECUTE_')
+                            ? 'Posso executar isto para você:'
+                            : 'Ação Operacional Sugerida:'}
+                        </span>
                       </div>
                       <p className="text-[11px] text-emerald-800 mb-2">
                         {msg.suggestedAction.label}
@@ -315,7 +376,11 @@ export const AIAssistantDrawer: React.FC = () => {
                             className="flex-1 rounded-lg bg-emerald-700 hover:bg-emerald-800 py-1.5 px-3 text-[11px] font-bold text-white shadow-2xs transition-colors flex items-center justify-center gap-1"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
-                            <span>Confirmar e Abrir</span>
+                            <span>
+                              {msg.suggestedAction.type?.startsWith('EXECUTE_')
+                                ? 'Confirmar e Executar'
+                                : 'Confirmar e Abrir'}
+                            </span>
                           </button>
                         </div>
                       ) : (

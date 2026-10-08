@@ -1294,8 +1294,64 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const executeAISuggestion = (action: any) => {
     if (!action) return;
-    if (action.tab) {
-      setCurrentTab(action.tab);
+    const data = action.data || {};
+    const today = new Date().toISOString().split('T')[0];
+
+    switch (action.type) {
+      // Delegar entrega para entregador (valida que a entrega existe)
+      case 'EXECUTE_ASSIGN_DELIVERY': {
+        const delivery = deliveries.find((d) => d.id === data.deliveryId);
+        if (delivery && data.driverProfileId && data.driverName) {
+          setDeliveryAssignment(delivery.id, data.driverProfileId, data.driverName);
+        }
+        setCurrentTab('deliveries');
+        break;
+      }
+      // Criar plano de colheita (valida que o produto existe)
+      case 'EXECUTE_CREATE_HARVEST': {
+        const product = products.find((p) => p.id === data.productId);
+        if (product && Number(data.harvestQty) > 0) {
+          createHarvestPlan(
+            product.id,
+            Number(data.neededQty) || Number(data.harvestQty),
+            Number(data.harvestQty),
+            data.date || today,
+            data.responsible || 'Assistente IA',
+            data.notes
+          );
+        }
+        setCurrentTab('planning');
+        break;
+      }
+      // Mudar status de pedido (valida pedido e status)
+      case 'EXECUTE_ORDER_STATUS': {
+        const validStatus = ['pendente', 'em_separacao', 'pronto', 'em_rota', 'entregue', 'cancelado'];
+        if (
+          data.orderId &&
+          orders.some((o) => o.id === data.orderId) &&
+          validStatus.includes(data.status)
+        ) {
+          updateOrderStatus(data.orderId, data.status);
+        }
+        setCurrentTab('orders');
+        break;
+      }
+      // Registrar recebimento (valida conta e valor)
+      case 'EXECUTE_RECEIVE_PAYMENT': {
+        if (
+          data.receivableId &&
+          receivables.some((r) => r.id === data.receivableId) &&
+          Number(data.amount) > 0
+        ) {
+          receivePayment(data.receivableId, Number(data.amount), data.paymentMethod || 'pix');
+        }
+        setCurrentTab('finance');
+        break;
+      }
+      default:
+        if (action.tab) {
+          setCurrentTab(action.tab);
+        }
     }
   };
 

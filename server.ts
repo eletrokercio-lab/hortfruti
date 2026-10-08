@@ -538,9 +538,9 @@ Você é o Assistente Inteligente Oficial do HortiGestão (v4.0), um copiloto op
 Regras inegociáveis de comportamento (PRD):
 1. SIMPLICIDADE E OBJETIVIDADE: Linguagem prática, direta e profissional em Português do Brasil.
 2. DADOS REAIS: Utilize ESTRITAMENTE as informações enviadas no contexto operacional. NUNCA invente estoques, pedidos ou clientes que não existem no banco. Se não souber, diga: "Não encontrei essa informação cadastrada."
-3. SEGURANÇA E CONFIRMAÇÃO: A IA NUNCA executa ações críticas automaticamente (alterar preços, fechar contabilidade, criar pedidos direto). Você SUGERE a ação estruturada para que o usuário confirme no sistema.
+3. SEGURANÇA E CONFIRMAÇÃO: Você PROPÕE ações estruturadas; o sistema só executa depois que o usuário confirma o botão. Nunca invente IDs — use SOMENTE os IDs do contexto enviado.
 4. PERMISSÕES: Usuário atual com papel: "${role}".
-5. RESPOSTA ESTRUTURADA: Responda em texto claro e, se for aplicável sugerir uma ação operacional, indique a tela correta (o sistema detecta a tela automaticamente pelo tema da pergunta).
+5. RESPOSTA SEMPRE EM JSON (obrigatório): {"answer": "texto claro em pt-BR", "action": null | {objeto de ação}}.
 
 ${isOperator ? `
 == MODO TREINADOR DO OPERADOR ==
@@ -569,6 +569,22 @@ O usuário atual está APRENDENDO a operar o sistema. Seja um treinador paciente
 • Dar baixa num pagamento: menu FINANCEIRO → Contas a Receber → achar o cliente → botão "Registrar Recebimento" → informar valor e forma.
 • Cadastrar mercado novo: menu CLIENTES → "Novo Cliente" → preencher nome, documento, telefone, endereço → salvar.
 • Conferir vasilhames de um cliente: menu VASILHAMES → buscar o cliente → ver saldo e histórico.
+
+== AÇÕES QUE VOCÊ PODE PROPOR (executadas só após o usuário confirmar) ==
+Se o usuário PEDIR PARA FAZER algo (ex.: "envie o pedido PED-123 para entrega", "faça o pedido de colheita do tomate", "marque o pedido como em rota", "recebi o pagamento do X"), inclua em "action" UM dos objetos abaixo, usando IDs EXATOS do contexto (pendingDeliveries, drivers, ordersList, receivablesList, productsList). Quantias são números. Se faltar algum dado para montar a ação, pergunte no "answer" e mande action null.
+
+1) Enviar/delegar entrega para um entregador:
+{"type":"EXECUTE_ASSIGN_DELIVERY","label":"Delegar entrega <nº pedido> para <nome>","tab":"deliveries","data":{"deliveryId":"id de pendingDeliveries","driverProfileId":"id de drivers","driverName":"nome do entregador"}}
+2) Criar pedido de colheita:
+{"type":"EXECUTE_CREATE_HARVEST","label":"Criar colheita de <produto>","tab":"planning","data":{"productId":"id de productsList","neededQty":quantidade_necessaria,"harvestQty":quantidade_a_colher,"date":"YYYY-MM-DD (use todayDate do contexto como hoje, ou data citada pelo usuário)","responsible":"nome ou 'Equipe de colheita'","notes":"opcional"}}
+3) Mudar status de um pedido:
+{"type":"EXECUTE_ORDER_STATUS","label":"Marcar pedido <nº> como <status>","tab":"orders","data":{"orderId":"id de ordersList","status":"pendente|em_separacao|pronto|em_rota|entregue|cancelado"}}
+4) Registrar recebimento de pagamento:
+{"type":"EXECUTE_RECEIVE_PAYMENT","label":"Registrar pagamento de <cliente>","tab":"finance","data":{"receivableId":"id de receivablesList","amount":valor,"paymentMethod":"pix|vista|prazo"}}
+
+Para apenas MOSTRAR uma tela use action com type/t/tab:
+{"type":"NAVIGATE_ORDERS|NAVIGATE_DELIVERIES|NAVIGATE_PRODUCTS|NAVIGATE_CUSTOMERS|NAVIGATE_PLANNING|NAVIGATE_PLANNING_PURCHASE|NAVIGATE_PLANNING_HARVEST|NAVIGATE_CRATES|NAVIGATE_SUPPLIERS|NAVIGATE_RECEIVABLES_OVERDUE|NAVIGATE_ACCOUNTANT|NAVIGATE_DASHBOARD","label":"texto do botão","tab":"orders|deliveries|products|customers|planning|crates|suppliers|finance|accountant|dashboard"}
+Se for só pergunta/informação: action null.
 ` : ''}
 
 Contexto operacional atual da distribuidora fornecido pelo sistema:
@@ -579,33 +595,73 @@ ${JSON.stringify(systemContext || {}, null, 2)}
       try {
         const response: any = await callGeminiWithFallback(question, {
           systemInstruction: systemInstruction,
+          responseMimeType: 'application/json',
           temperature: 0.2,
         });
-        const answerText = response.text || 'Não consegui processar a resposta.';
+        let answerText = response.text || 'Não consegui processar a resposta.';
+        let suggestedAction: any = null;
 
-        // Detect if action can be suggested from the prompt or context
-        // (ordem importa: temas mais específicos primeiro)
-        let suggestedAction = null;
-        const qLower = question.toLowerCase();
+        // A IA responde em JSON { answer, action } — valida o tipo contra a whitelist
+        const ACTION_TYPES = new Set([
+          'EXECUTE_ASSIGN_DELIVERY',
+          'EXECUTE_CREATE_HARVEST',
+          'EXECUTE_ORDER_STATUS',
+          'EXECUTE_RECEIVE_PAYMENT',
+          'NAVIGATE_ORDERS',
+          'NAVIGATE_DELIVERIES',
+          'NAVIGATE_PRODUCTS',
+          'NAVIGATE_CUSTOMERS',
+          'NAVIGATE_PLANNING',
+          'NAVIGATE_PLANNING_PURCHASE',
+          'NAVIGATE_PLANNING_HARVEST',
+          'NAVIGATE_CRATES',
+          'NAVIGATE_SUPPLIERS',
+          'NAVIGATE_RECEIVABLES_OVERDUE',
+          'NAVIGATE_ACCOUNTANT',
+          'NAVIGATE_DASHBOARD',
+        ]);
+        try {
+          const parsed = JSON.parse(answerText);
+          if (parsed && typeof parsed.answer === 'string') answerText = parsed.answer;
+          if (
+            parsed &&
+            parsed.action &&
+            typeof parsed.action === 'object' &&
+            typeof parsed.action.type === 'string' &&
+            ACTION_TYPES.has(parsed.action.type)
+          ) {
+            suggestedAction = {
+              type: parsed.action.type,
+              label: typeof parsed.action.label === 'string' ? parsed.action.label : 'Executar ação',
+              tab: typeof parsed.action.tab === 'string' ? parsed.action.tab : undefined,
+              data: parsed.action.data && typeof parsed.action.data === 'object' ? parsed.action.data : undefined,
+            };
+          }
+        } catch {
+          // resposta veio como texto puro — cai na detecção por palavra-chave abaixo
+        }
 
-        const navActions: { keywords: string[]; action: { type: string; label: string; tab: string } }[] = [
-          { keywords: ['comprar', 'necessidade de compra', 'compra de fornecedor'], action: { type: 'NAVIGATE_PLANNING_PURCHASE', label: 'Ver Necessidades e Resolver Compras', tab: 'planning' } },
-          { keywords: ['colheita', 'colher'], action: { type: 'NAVIGATE_PLANNING_HARVEST', label: 'Ver Planejamento de Colheita', tab: 'planning' } },
-          { keywords: ['mercadoria', 'estoque', 'falta mercador'], action: { type: 'NAVIGATE_PLANNING', label: 'Ver Planejamento de Necessidades', tab: 'planning' } },
-          { keywords: ['devedor', 'devendo', 'atrasado', 'vencido', 'receber', 'recebimento', 'pagou'], action: { type: 'NAVIGATE_RECEIVABLES_OVERDUE', label: 'Abrir Contas a Receber', tab: 'finance' } },
-          { keywords: ['vasilhame', 'engradado', 'caixa devolvid'], action: { type: 'NAVIGATE_CRATES', label: 'Abrir Vasilhames', tab: 'crates' } },
-          { keywords: ['fornecedor'], action: { type: 'NAVIGATE_SUPPLIERS', label: 'Abrir Fornecedores', tab: 'suppliers' } },
-          { keywords: ['produto', 'preço', 'preco', 'catálogo', 'catalogo'], action: { type: 'NAVIGATE_PRODUCTS', label: 'Abrir Produtos', tab: 'products' } },
-          { keywords: ['cliente', 'supermercado'], action: { type: 'NAVIGATE_CUSTOMERS', label: 'Abrir Clientes', tab: 'customers' } },
-          { keywords: ['pedido'], action: { type: 'NAVIGATE_ORDERS', label: 'Abrir Pedidos', tab: 'orders' } },
-          { keywords: ['entrega', 'motorista', 'rota'], action: { type: 'NAVIGATE_DELIVERIES', label: 'Acompanhar Entregas', tab: 'deliveries' } },
-          { keywords: ['venda', 'faturamento', 'resumo do dia', 'hoje'], action: { type: 'NAVIGATE_DASHBOARD', label: 'Ver Central do Dia', tab: 'dashboard' } },
-        ];
-
-        for (const nav of navActions) {
-          if (nav.keywords.some((k) => qLower.includes(k))) {
-            suggestedAction = nav.action;
-            break;
+        // Fallback: se a IA não propôs ação, detecta navegação pelo tema da pergunta
+        if (!suggestedAction) {
+          const qLower = question.toLowerCase();
+          const navActions: { keywords: string[]; action: { type: string; label: string; tab: string } }[] = [
+            { keywords: ['comprar', 'necessidade de compra', 'compra de fornecedor'], action: { type: 'NAVIGATE_PLANNING_PURCHASE', label: 'Ver Necessidades e Resolver Compras', tab: 'planning' } },
+            { keywords: ['colheita', 'colher'], action: { type: 'NAVIGATE_PLANNING_HARVEST', label: 'Ver Planejamento de Colheita', tab: 'planning' } },
+            { keywords: ['mercadoria', 'estoque', 'falta mercador'], action: { type: 'NAVIGATE_PLANNING', label: 'Ver Planejamento de Necessidades', tab: 'planning' } },
+            { keywords: ['devedor', 'devendo', 'atrasado', 'vencido', 'receber', 'recebimento', 'pagou'], action: { type: 'NAVIGATE_RECEIVABLES_OVERDUE', label: 'Abrir Contas a Receber', tab: 'finance' } },
+            { keywords: ['vasilhame', 'engradado', 'caixa devolvid'], action: { type: 'NAVIGATE_CRATES', label: 'Abrir Vasilhames', tab: 'crates' } },
+            { keywords: ['fornecedor'], action: { type: 'NAVIGATE_SUPPLIERS', label: 'Abrir Fornecedores', tab: 'suppliers' } },
+            { keywords: ['produto', 'preço', 'preco', 'catálogo', 'catalogo'], action: { type: 'NAVIGATE_PRODUCTS', label: 'Abrir Produtos', tab: 'products' } },
+            { keywords: ['cliente', 'supermercado'], action: { type: 'NAVIGATE_CUSTOMERS', label: 'Abrir Clientes', tab: 'customers' } },
+            { keywords: ['pedido'], action: { type: 'NAVIGATE_ORDERS', label: 'Abrir Pedidos', tab: 'orders' } },
+            { keywords: ['entrega', 'motorista', 'rota'], action: { type: 'NAVIGATE_DELIVERIES', label: 'Acompanhar Entregas', tab: 'deliveries' } },
+            { keywords: ['venda', 'faturamento', 'resumo do dia', 'hoje'], action: { type: 'NAVIGATE_DASHBOARD', label: 'Ver Central do Dia', tab: 'dashboard' } },
+          ];
+          for (const nav of navActions) {
+            if (nav.keywords.some((k) => qLower.includes(k))) {
+              suggestedAction = nav.action;
+              break;
+            }
           }
         }
 
