@@ -6,6 +6,11 @@
 
 // Mapa verificado: nome normalizado -> URLs de fotos conferidas (carregam e correspondem ao produto)
 const CURATED_IMAGES: Record<string, string[]> = {
+  'vagem': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8b/Four_Different_Varieties_of_Green_Beans_%28Phaseolus_vulgaris%29.jpg/500px-Four_Different_Varieties_of_Green_Beans_%28Phaseolus_vulgaris%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
+  'espinafre': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/Spinach_leaves.jpg/500px-Spinach_leaves.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
+  'coentro': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Coriander_Leaves.jpg/500px-Coriander_Leaves.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
+  'radite': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/c/cb/Daikon.Japan.jpg/500px-Daikon.Japan.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
+  'almeirao': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/Chicory_basal_leaves_%288689121952%29.jpg/500px-Chicory_basal_leaves_%288689121952%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
   'alface americana': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a5/Iceberg_lettuce_%28IJssla_krop%29.jpg/500px-Iceberg_lettuce_%28IJssla_krop%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail", "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d3/Iceberg_lettuce_in_Poplar_Farmhouse.jpg/500px-Iceberg_lettuce_in_Poplar_Farmhouse.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
   'alface crespa': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c2/Lettuce_2_-_Flickr_-_Trinity.jpg/500px-Lettuce_2_-_Flickr_-_Trinity.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
   'banana prata': ["https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Banana_bunch_in_a_banana_farm_at_Chinawal.jpg/500px-Banana_bunch_in_a_banana_farm_at_Chinawal.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail", "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ad/Madeira-Camara_de_Lobos-Banana_Bunch-01ESD.jpg/500px-Madeira-Camara_de_Lobos-Banana_Bunch-01ESD.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail"],
@@ -106,6 +111,12 @@ function normalizeName(name: string): string {
 }
 
 const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** Foto verificada do produto (sincrono) — null se não estiver no mapa */
+export function getCuratedImage(productName: string): string | null {
+  const urls = findCurated(productName);
+  return urls ? urls[0] : null;
+}
 
 /** Procura o produto no mapa verificado (chave mais longa primeiro, por palavra inteira) */
 function findCurated(productName: string): string[] | null {

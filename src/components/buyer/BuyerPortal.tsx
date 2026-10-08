@@ -36,6 +36,7 @@ import type {
   AccountsReceivable,
 } from '../../types';
 import { formatBRL } from '../../utils/formatters';
+import { getCuratedImage } from '../../services/productImageSearch';
 
 const categoryLabels: Record<string, string> = {
   frutas: 'Frutas',
@@ -741,9 +742,9 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                   const qty = cart[p.id] || 0;
                   return (
                     <div key={p.id} className={`rounded-xl border bg-white p-3 shadow-xs transition-all ${qty > 0 ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-gray-200'}`}>
-                      {p.imageUrl ? (
+                      {(p.imageUrl || getCuratedImage(p.name)) ? (
                         <img
-                          src={p.imageUrl}
+                          src={p.imageUrl || getCuratedImage(p.name) || ''}
                           alt={p.name}
                           loading="lazy"
                           className="mb-2 h-24 w-full rounded-lg border border-gray-100 object-cover"

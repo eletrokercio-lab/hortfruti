@@ -15,7 +15,7 @@ import {
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory, ProductSalesType, ProductUnit } from '../../types';
 import { formatBRL } from '../../utils/formatters';
-import { searchProductImages, ProductImageOption } from '../../services/productImageSearch';
+import { searchProductImages, getCuratedImage, ProductImageOption } from '../../services/productImageSearch';
 
 export const ProductsView: React.FC = () => {
   const { products, createProduct, updateProduct } = useApp();
@@ -41,20 +41,25 @@ export const ProductsView: React.FC = () => {
   const [imgLoading, setImgLoading] = useState(false);
   const [imgSearchedFor, setImgSearchedFor] = useState('');
 
-  // Busca automática de fotos enquanto o nome é digitado (debounce 700ms)
+  // Busca automática de fotos enquanto o nome é digitado (debounce 700ms).
+  // Limpa as opções antigas imediatamente e ignora respostas fora de ordem.
   useEffect(() => {
     if (!isModalOpen || name.trim().length < 3) {
       setImgOptions([]);
       setImgSearchedFor('');
       return;
     }
+    setImgOptions([]);
+    setImgLoading(true);
     const term = name.trim();
     const timer = setTimeout(async () => {
-      setImgLoading(true);
       const opts = await searchProductImages(term, 4);
-      setImgOptions(opts);
-      setImgSearchedFor(term);
-      setImgLoading(false);
+      // só aplica se o nome ainda for o mesmo (evita foto do produto anterior)
+      if (name.trim() === term) {
+        setImgOptions(opts);
+        setImgSearchedFor(term);
+        setImgLoading(false);
+      }
     }, 700);
     return () => clearTimeout(timer);
   }, [name, isModalOpen]);
@@ -362,9 +367,9 @@ export const ProductsView: React.FC = () => {
                   <tr key={prod.id} className="hover:bg-gray-50/60 transition-colors">
                     <td className="py-3 px-4">
                       <div className="flex items-center gap-2.5">
-                        {prod.imageUrl ? (
+                        {prod.imageUrl || getCuratedImage(prod.name) ? (
                           <img
-                            src={prod.imageUrl}
+                            src={prod.imageUrl || getCuratedImage(prod.name) || ''}
                             alt={prod.name}
                             loading="lazy"
                             className="h-9 w-9 shrink-0 rounded-lg border border-gray-200 object-cover"
