@@ -639,6 +639,9 @@ Use SOMENTE productId de productsList. Se houver mais de um produto com nome par
 7) Definir preço especial para um cliente específico:
 {"type":"EXECUTE_SET_CUSTOMER_PRICE","label":"Preço especial de <produto> para <cliente>: R$ <valor>","tab":"customers","data":{"customerId":"id de customersList","productId":"id de productsList","price":preco_especial}}
 Regra de ouro: o preço especial vale APENAS para esse cliente (tabela própria/promocional); para mudar o preço de todos, use a ação 6. Se faltar o cliente ou o produto, pergunte.
+8) Adicionar pedido pronto (lançar um pedido que o usuário ditar/enviar, ex.: copiado do WhatsApp):
+{"type":"EXECUTE_CREATE_ORDER","label":"Adicionar pedido de <cliente> (<N> itens)","tab":"orders","data":{"customerId":"id de customersList","items":[{"productId":"id de productsList","quantity":quantidade,"unitPrice":preco_citado_ou_null}],"deliveryDate":"YYYY-MM-DD (todayDate se não citado; 'amanhã' = dia seguinte a todayDate)","paymentMethod":"pix|cash|credit (opcional — omita se o usuário não citar; 'à vista' = cash)","paymentTerm":"sight|7d|15d|30d|weekly|biweekly|monthly (opcional; sight = à vista)","notes":"opcional"}}
+REGRAS DO PEDIDO: casa o nome do cliente com customersList (ignore maiúsculas/minúsculas e acentos); se o cliente não existir ou houver mais de um parecido, PERGUNTE no "answer" e mande action null. Casa CADA produto com productsList pelo nome (ignore acentos e detalhes como "especial", "lavada"); se algum item não existir no catálogo, a quantidade for inválida (<= 0) ou estiver ilegível, PERGUNTE antes. NUNCA invente preço: só envie unitPrice quando o usuário citar UM preço explícito para aquele item (envie nesse caso unitPrice = número citado; isso vale como preço individual). Se o usuário disser que vale a "tabela do cliente", "preço especial" ou não citar preços, envie os itens SEM unitPrice — o sistema aplica sozinho o preço especial/promocional daquele cliente. Se o usuário mandar VÁRIOS pedidos de uma vez, proponha UMA ação por cliente (mesma estrutura, vários itens agrupados por cliente).
 
 == DETECÇÃO DE INTENÇÃO (REGRA OBRIGATÓRIA — NUNCA IGNORE) ==
 Se o usuário pedir para FAZER/MUDAR/CADASTRAR/AJUSTAR algo, a action DEVE ser do tipo EXECUTE_* correspondente. NUNCA responda um pedido de execução com NAVIGATE_* (isso é falha grave). NAVIGATE_* é APENAS quando o usuário pede para VER/ABRIR/MOSTRAR uma tela.
@@ -651,7 +654,9 @@ Mapa de frases → ação (aplicado antes de qualquer outra consideração):
 • "envie/delega a entrega [nº] para [entregador]" → EXECUTE_ASSIGN_DELIVERY
 • "marca/muda o pedido [nº] para [status]" → EXECUTE_ORDER_STATUS
 • "registra/recebi o pagamento de [cliente]" → EXECUTE_RECEIVE_PAYMENT
+• "adiciona/lança/cadastra o(s) pedido(s) [do cliente X / que te enviei / do WhatsApp]" → EXECUTE_CREATE_ORDER (interprete a lista de itens quantidade + produto [+ preço citado]; se o usuário enviar pedidos prontos com preços especiais, trate os preços citados como unitPrice individual)
 Exemplo resolvido: usuário diz "ajuste o abacaxi para o preço de 54,00 cx, para cliente Supermercado Central" → action = {"type":"EXECUTE_SET_CUSTOMER_PRICE","label":"Preço especial de ABACAXI para Supermercado Central: R$ 54,00/cx","tab":"customers","data":{"customerId":"id do Supermercado Central em customersList","productId":"id do ABACAXI em productsList","price":54}}
+Exemplo resolvido: usuário diz "adiciona o pedido do Lupri para amanhã: 10 caixas de tomate a 80,00 e 5 kg de almeirão" (Lupri existe, tomate e almeirão existem) → action = {"type":"EXECUTE_CREATE_ORDER","label":"Adicionar pedido de Lupri (2 itens)","tab":"orders","data":{"customerId":"id do Lupri","items":[{"productId":"id do tomate","quantity":10,"unitPrice":80},{"productId":"id do almeirão","quantity":5,"unitPrice":null}],"deliveryDate":"dia seguinte a todayDate"}} (unitPrice só no tomate, que teve preço citado)
 No "answer" explique o que vai ser feito em 1 frase e diga para confirmar no botão.
 
 Para apenas MOSTRAR uma tela use action com type/t/tab:
@@ -682,6 +687,7 @@ ${JSON.stringify(systemContext || {}, null, 2)}
           'EXECUTE_CREATE_PRODUCT',
           'EXECUTE_UPDATE_PRODUCT_PRICE',
           'EXECUTE_SET_CUSTOMER_PRICE',
+          'EXECUTE_CREATE_ORDER',
           'NAVIGATE_ORDERS',
           'NAVIGATE_DELIVERIES',
           'NAVIGATE_PRODUCTS',

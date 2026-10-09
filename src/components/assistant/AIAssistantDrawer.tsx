@@ -57,7 +57,7 @@ export const AIAssistantDrawer: React.FC = () => {
     {
       id: 'welcome',
       sender: 'assistant',
-      text: 'Olá! Sou o Assistente Inteligente do HortiGestão. Além de responder perguntas, eu EXECUTO tarefas para você: delegar entregas ao entregador, criar pedido de colheita, mudar status de pedido e registrar pagamentos — sempre pedindo sua confirmação antes. Ou me pergunte sobre compras, clientes devedores, entregas e vendas. Como posso ajudar?',
+      text: 'Olá! Sou o Assistente Inteligente do HortiGestão. Além de responder perguntas, eu EXECUTO tarefas para você: adicionar pedidos prontos que você me enviar (ex.: do WhatsApp), delegar entregas ao entregador, criar pedido de colheita, mudar status de pedido, ajustar preços e registrar pagamentos — sempre pedindo sua confirmação antes. Como posso ajudar?',
       timestamp: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
     },
   ]);
@@ -425,6 +425,43 @@ export const AIAssistantDrawer: React.FC = () => {
                           )}
                         </div>
                       )}
+
+                      {/* Pedido: resumo dos itens antes de executar */}
+                      {msg.suggestedAction.type === 'EXECUTE_CREATE_ORDER' && !msg.confirmed && (() => {
+                        const d = msg.suggestedAction.data || {};
+                        const cust = customers.find((c) => c.id === d.customerId);
+                        const lines = (Array.isArray(d.items) ? d.items : []).map((it: any) => {
+                          const p = products.find((pp) => pp.id === it?.productId);
+                          const unitPrice = Number(it?.unitPrice) > 0 ? Number(it.unitPrice) : p?.defaultPrice || 0;
+                          const qty = Number(it?.quantity) || 0;
+                          return { name: p?.name || 'Produto não encontrado', qty, unit: p?.unit || 'un', unitPrice, total: qty * unitPrice };
+                        });
+                        const total = lines.reduce((acc: number, l: { total: number }) => acc + l.total, 0);
+                        const fmt = (v: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+                        return (
+                          <div className="mb-2 rounded-lg border border-emerald-200 bg-white p-2">
+                            <p className="text-[10px] font-bold uppercase text-gray-700">
+                              Pedido de {cust ? cust.name : 'cliente não encontrado'}
+                              {!cust && <span className="ml-1 font-normal text-red-600">(não executável)</span>}
+                            </p>
+                            <ul className="mt-1 space-y-0.5 text-[10px] text-gray-600">
+                              {lines.map((l: { name: string; qty: number; unit: string; unitPrice: number; total: number }, i: number) => (
+                                <li key={i} className="flex justify-between gap-2">
+                                  <span>{l.qty} {l.unit} · {l.name}{l.unitPrice > 0 && Number(d.items[i]?.unitPrice) > 0 ? ` a ${fmt(l.unitPrice)}` : ''}</span>
+                                  <span className="font-semibold text-gray-800">{fmt(l.total)}</span>
+                                </li>
+                              ))}
+                            </ul>
+                            <p className="mt-1 flex justify-between border-t border-emerald-100 pt-1 text-[11px] font-bold text-gray-900">
+                              <span>Total estimado:</span>
+                              <span>{fmt(total)}</span>
+                            </p>
+                            <p className="mt-1 text-[9px] text-emerald-700">
+                              Preço especial/promoção do cliente é aplicado automaticamente nos itens sem preço citado.
+                            </p>
+                          </div>
+                        );
+                      })()}
 
                       {!msg.confirmed ? (
                         <div className="flex gap-2">

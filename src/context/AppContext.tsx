@@ -556,7 +556,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const createOrder = (orderData: {
     customerId: string;
     deliveryDate: string;
-    items: { productId: string; quantity: number }[];
+    items: { productId: string; quantity: number; unitPrice?: number }[];
     notes?: string;
     paymentMethod?: PaymentMethod;
     paymentTerm?: PaymentTerm;
@@ -579,7 +579,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const orderItems: OrderItem[] = orderData.items.map((item) => {
       const product = products.find((p) => p.id === item.productId);
       const priceInfo = getProductPriceForCustomer(item.productId, customer.id);
-      const lineSubtotal = item.quantity * priceInfo.price;
+      // unitPrice explícito (ex.: pedido lançado pela IA com preço citado) tem prioridade
+      const hasExplicitPrice = item.unitPrice != null && Number(item.unitPrice) > 0;
+      const unitPrice = hasExplicitPrice ? Number(item.unitPrice) : priceInfo.price;
+      const lineSubtotal = item.quantity * unitPrice;
       subtotal += lineSubtotal;
 
       return {
@@ -587,9 +590,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         productName: product ? product.name : 'Produto Desconhecido',
         unit: product ? product.unit : 'cx',
         quantity: item.quantity,
-        unitPrice: priceInfo.price,
-        originalPrice: priceInfo.originalPrice,
-        isPromo: priceInfo.isPromo,
+        unitPrice,
+        originalPrice: hasExplicitPrice ? unitPrice : priceInfo.originalPrice,
+        isPromo: hasExplicitPrice ? false : priceInfo.isPromo,
         subtotal: lineSubtotal,
       };
     });
@@ -1578,6 +1581,34 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           receivePayment(data.receivableId, Number(data.amount), data.paymentMethod || 'pix');
         }
         setCurrentTab('finance');
+        break;
+      }
+      // Adicionar pedido pronto (ex.: enviado por WhatsApp) com preços do cliente
+      case 'EXECUTE_CREATE_ORDER': {
+        const customer = customers.find((c) => c.id === data.customerId);
+        const validMethods = ['pix', 'boleto', 'cash', 'credit', 'transfer'];
+        const validTerms = ['sight', '7d', '15d', '30d', 'weekly', 'biweekly', 'monthly'];
+        const validItems = (Array.isArray(data.items) ? data.items : [])
+          .map((it: any) => ({
+            productId: it?.productId,
+            quantity: Number(it?.quantity) || 0,
+            unitPrice: it?.unitPrice != null && Number(it.unitPrice) > 0 ? Number(it.unitPrice) : undefined,
+          }))
+          .filter(
+            (it: any) =>
+              it.productId && it.quantity > 0 && products.some((p) => p.id === it.productId)
+          );
+        if (customer && validItems.length > 0) {
+          createOrder({
+            customerId: customer.id,
+            deliveryDate: data.deliveryDate || today,
+            items: validItems,
+            notes: data.notes,
+            paymentMethod: validMethods.includes(data.paymentMethod) ? data.paymentMethod : undefined,
+            paymentTerm: validTerms.includes(data.paymentTerm) ? data.paymentTerm : undefined,
+          });
+        }
+        setCurrentTab('orders');
         break;
       }
       default:
