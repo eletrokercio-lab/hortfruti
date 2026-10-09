@@ -285,6 +285,8 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       setDeliveries(
         (delRes.data as any[]).map((d) => ({
           ...d,
+          // Normaliza snake_case do banco para os campos usados na UI
+          orderId: d.order_id || d.orderId || undefined,
           orderNumber: d.order_number || '',
           grossWeight: d.gross_weight != null ? Number(d.gross_weight) : undefined,
           tareWeight: d.tare_weight != null ? Number(d.tare_weight) : undefined,

@@ -1000,6 +1000,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       );
       if (linkedOrder && rec && linkedOrder.paymentMethod === 'pix') {
         receivePayment(rec.id, rec.amount, 'pix');
+        // Persistir a baixa no Supabase (RPC valida no servidor quem pode baixar:
+        // entregador da própria entrega, ou master/operador)
+        (async () => {
+          try {
+            const { getSupabaseClient } = await import('../lib/supabase');
+            const client = getSupabaseClient();
+            if (client && delivery.orderId) {
+              await client.rpc('fn_baixar_recebivel_entrega', {
+                p_order_id: delivery.orderId,
+                p_amount: rec.amount,
+                p_method: 'pix',
+              });
+            }
+          } catch {
+            // sem conexão: baixa permanece local
+          }
+        })();
         const idOp = genNotificationId();
         markNotificationSeen(idOp);
         setNotifications((prev) => [
