@@ -86,6 +86,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const [crates, setCrates] = useState<CrateRecord[]>([]);
   const [receivables, setReceivables] = useState<AccountsReceivable[]>([]);
   const [pixKey, setPixKey] = useState('');
+  const [pixHolder, setPixHolder] = useState('');
   const [loading, setLoading] = useState(true);
   const [noCustomerLink, setNoCustomerLink] = useState(false);
 
@@ -194,7 +195,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       client.from('deliveries').select('*').eq('customer_id', customerId).order('date', { ascending: false }),
       client.from('crates').select('*').eq('customer_id', customerId).order('date', { ascending: false }),
       client.from('accounts_receivable').select('*').eq('customer_id', customerId).order('due_date', { ascending: false }),
-      client.from('app_settings').select('value').eq('key', 'pix_key').maybeSingle(),
+      client.from('app_settings').select('key,value').in('key', ['pix_key', 'pix_holder']),
     ]);
 
     if (prodRes.data)
@@ -317,7 +318,12 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
           notes: r.notes || undefined,
         }))
       );
-    if (settingsRes?.data?.value) setPixKey(settingsRes.data.value);
+    // settingsRes agora é um array de { key, value }
+    const settingsArr = (settingsRes?.data || []) as { key: string; value: string }[];
+    const pixKeyVal = settingsArr.find((s) => s.key === 'pix_key')?.value;
+    const pixHolderVal = settingsArr.find((s) => s.key === 'pix_holder')?.value;
+    if (pixKeyVal) setPixKey(pixKeyVal);
+    if (pixHolderVal) setPixHolder(pixHolderVal);
 
     // Dados do cadastro comercial (pré-preenchem o endereço de entrega)
     const { data: cust } = await client
@@ -866,6 +872,9 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                         <p className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
                           <QrCode className="h-3.5 w-3.5" /> Pague via PIX agora mesmo e envie o comprovante:
                         </p>
+                        {pixHolder && (
+                          <p className="text-[11px] text-emerald-700">Favorecido: <span className="font-bold">{pixHolder}</span></p>
+                        )}
                         <div className="mt-1.5 flex items-center gap-2">
                           <code className="flex-1 truncate rounded bg-emerald-50 px-2 py-1.5 text-xs font-semibold text-gray-800">{pixKey}</code>
                           <button onClick={copyPix} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700">
@@ -1049,6 +1058,9 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                 {pixKey && (
                   <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                     <p className="text-xs font-bold text-emerald-800">Pague via PIX e envie o comprovante no WhatsApp:</p>
+                    {pixHolder && (
+                      <p className="text-[11px] text-emerald-700">Favorecido: <span className="font-bold">{pixHolder}</span></p>
+                    )}
                     <div className="mt-1.5 flex items-center gap-2">
                       <code className="flex-1 truncate rounded bg-white px-2 py-1.5 text-xs font-semibold text-gray-800">{pixKey}</code>
                       <button onClick={copyPix} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700">
@@ -1238,13 +1250,18 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
               {payment === 'pix' && (
                 <div className="mt-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
                   {pixKey ? (
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 truncate rounded bg-white px-2 py-1.5 text-xs font-semibold text-gray-800">{pixKey}</code>
-                      <button onClick={copyPix} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700">
-                        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                        {copied ? 'Copiado!' : 'Copiar chave'}
-                      </button>
-                    </div>
+                    <>
+                      {pixHolder && (
+                        <p className="text-[11px] text-emerald-700">Favorecido: <span className="font-bold">{pixHolder}</span></p>
+                      )}
+                      <div className="mt-1.5 flex items-center gap-2">
+                        <code className="flex-1 truncate rounded bg-white px-2 py-1.5 text-xs font-semibold text-gray-800">{pixKey}</code>
+                        <button onClick={copyPix} className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700">
+                          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+                          {copied ? 'Copiado!' : 'Copiar chave'}
+                        </button>
+                      </div>
+                    </>
                   ) : (
                     <p className="text-xs text-emerald-700">
                       Pague via PIX após a confirmação. A chave será informada pela distribuidora.
