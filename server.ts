@@ -729,27 +729,33 @@ ${JSON.stringify(systemContext || {}, null, 2)}
             customers.find((c) => qLower.includes(String(c.name).toLowerCase()));
 
           // Pedido de ajuste de preço: com cliente citado = preço especial; sem = tabela base
-          const mentionsPriceChange = /\b(ajust|alter|troc|mud|defin)\w*\s+(o\s+)?pre|pre[çc]o\s+especial|mud[ae].*pre[çc]o|pre[çc]o.*para\s*r?\$?\s*\d/i.test(qLower);
-          const priceMatch = qLower.match(/(\d+[.,]?\d*)/);
-          if (mentionsPriceChange && priceMatch) {
+          const hasPriceWord = /pre[çc]o|valor|a\s+r?\$/.test(qLower);
+          const hasActionVerb = /(ajust|alter|troc|mud|defin|coloc|deix|atualiz|ficar)/.test(qLower);
+          const priceMatch = qLower.match(/(\d{1,4}(?:[.,]\d{1,2})?)/);
+          let priceAction: any = null;
+          if ((hasPriceWord || hasActionVerb) && priceMatch) {
             const price = Number(priceMatch[1].replace(',', '.'));
             const product = findProduct();
             const customer = findCustomer();
             if (product && customer && price > 0) {
-              suggestedAction = {
+              priceAction = {
                 type: 'EXECUTE_SET_CUSTOMER_PRICE',
                 label: `Preço especial de ${product.name} para ${customer.name}: R$ ${price.toFixed(2)}/${product.unit}`,
                 tab: 'customers',
                 data: { customerId: customer.customerId, productId: product.productId, price },
               };
             } else if (product && price > 0 && !qLower.includes('cliente')) {
-              suggestedAction = {
+              priceAction = {
                 type: 'EXECUTE_UPDATE_PRODUCT_PRICE',
                 label: `Alterar preço de ${product.name} para R$ ${price.toFixed(2)}/${product.unit}`,
                 tab: 'products',
                 data: { productId: product.productId, defaultPrice: price },
               };
             }
+          }
+          // Pedido de execução NUNCA deve virar só navegação: sobrescreve NAVIGATE
+          if (priceAction && (!suggestedAction || suggestedAction.type.startsWith('NAVIGATE'))) {
+            suggestedAction = priceAction;
           }
 
           if (!suggestedAction) {
