@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatDate } from '../../utils/formatters';
+import { exportExcel, exportPDF, ReportTable, fmtBRLForReport } from '../../utils/reportExporters';
 
 export const AccountantCenter: React.FC = () => {
   const {
@@ -86,7 +87,12 @@ export const AccountantCenter: React.FC = () => {
     .filter((p) => p.dueDate.startsWith(month) && p.status !== 'pago')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
-  const netMonthResult = monthCashReceived - (monthPurchases + monthExpenses);
+  // Resultado de caixa do mês: entradas reais - saídas reais do caixa
+  const monthCashOut = cashMovements
+    .filter((m) => m.date.startsWith(month) && m.type === 'saida')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+
+  const netMonthResult = monthCashReceived - monthCashOut;
 
   const handleToggleClose = () => {
     if (isClosed) {
@@ -105,7 +111,99 @@ export const AccountantCenter: React.FC = () => {
     setIsAssistantOpen(true);
   };
 
-  // Export genérico (CSV ; separado, com escape)
+  // ===== Tabelas dos relatórios (dados reais do mês) =====
+  // 1. Vendas
+  const buildSalesTable = (): ReportTable => ({
+    name: 'Relatório de Vendas',
+    columns: ['Pedido', 'Cliente', 'Emissão', 'Entrega', 'Status', 'Pagamento', 'Condição', 'Total (R$)'],
+    rows: monthOrders.map((o) => [
+      o.orderNumber,
+      o.customerName,
+      formatDate(o.date),
+      formatDate(o.deliveryDate),
+      o.status,
+      o.paymentMethod.toUpperCase(),
+      o.paymentTerm,
+      o.total.toFixed(2).replace('.', ','),
+    ]),
+  });
+
+  // 2. Compras (custo de mercadoria)
+  const buildPurchasesTable = (): ReportTable => ({
+    name: 'Relatório de Compras (CMV)',
+    columns: ['Compra', 'Fornecedor', 'Data', 'Vencimento', 'Status', 'Total (R$)'],
+    rows: purchases
+      .filter((p) => p.date.startsWith(month))
+      .map((p) => [
+        p.purchaseNumber,
+        p.supplierName,
+        formatDate(p.date),
+        formatDate(p.dueDate),
+        p.status,
+        p.total.toFixed(2).replace('.', ','),
+      ]),
+  });
+
+  // 3. Despesas
+  const buildExpensesTable = (): ReportTable => ({
+    name: 'Relatório de Despesas',
+    columns: ['Data', 'Categoria', 'Descrição', 'Pagamento', 'Comprovante', 'Valor (R$)'],
+    rows: expenses
+      .filter((e) => e.date.startsWith(month))
+      .map((e) => [
+        formatDate(e.date),
+        e.category.replace('_', ' '),
+        e.description,
+        e.paymentMethod.toUpperCase(),
+        e.receiptRef || '-',
+        e.amount.toFixed(2).replace('.', ','),
+      ]),
+  });
+
+  // 4. Extrato de caixa
+  const buildCashTable = (): ReportTable => ({
+    name: 'Extrato de Caixa do Mês',
+    columns: ['Data', 'Tipo', 'Categoria', 'Descrição', 'Valor (R$)'],
+    rows: cashMovements
+      .filter((m) => m.date.startsWith(month))
+      .map((m) => [
+        formatDate(m.date),
+        m.type === 'entrada' ? 'Entrada' : 'Saída',
+        m.category.replace('_', ' '),
+        m.description,
+        `${m.type === 'entrada' ? '+' : '-'} ${m.amount.toFixed(2).replace('.', ',')}`,
+      ]),
+  });
+
+  // Resumo contábil do mês
+  const buildSummaryTable = (): ReportTable => ({
+    name: 'Demonstrativo de Fechamento',
+    columns: ['Indicador Contábil', 'Valor (R$)'],
+    rows: [
+      ['Mês de referência', formatMonthLabel(month)],
+      ['Faturamento bruto de vendas (pedidos emitidos)', grossRevenue.toFixed(2).replace('.', ',')],
+      ['Recebimentos efetivados no caixa', monthCashReceived.toFixed(2).replace('.', ',')],
+      ['Compras de mercadorias registradas (CMV)', monthPurchases.toFixed(2).replace('.', ',')],
+      ['Despesas operacionais registradas', monthExpenses.toFixed(2).replace('.', ',')],
+      ['Saídas efetivadas no caixa', monthCashOut.toFixed(2).replace('.', ',')],
+      ['Contas a receber em aberto (vencimento no mês)', openRec.toFixed(2).replace('.', ',')],
+      ['Contas a pagar em aberto (vencimento no mês)', openPay.toFixed(2).replace('.', ',')],
+      ['Resultado de caixa do período (entradas - saídas)', netMonthResult.toFixed(2).replace('.', ',')],
+      ['Situação do período', isClosed ? 'Fechado e conciliado' : 'Aberto (em andamento)'],
+    ],
+  });
+
+  const accountantNote =
+    'Compras e despesas refletem lançamentos registrados no sistema; o resultado apresentado é de caixa (recebimentos menos pagamentos do mês), não lucro contábil.';
+
+  // ===== Exportação por tipo (CSV / Excel / PDF) =====
+  const REPORT_BUILDERS: Record<string, () => ReportTable> = {
+    vendas: buildSalesTable,
+    compras: buildPurchasesTable,
+    despesas: buildExpensesTable,
+    caixa: buildCashTable,
+  };
+
   const downloadCsv = (filename: string, rows: (string | number)[][]) => {
     const esc = (v: string | number) => {
       const s = String(v ?? '');
@@ -122,85 +220,58 @@ export const AccountantCenter: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  // 1. Vendas do mês: pedido a pedido
-  const handleExportSalesCsv = () => {
-    downloadCsv(`vendas_${month}.csv`, [
-      ['Pedido', 'Cliente', 'Emissao', 'Entrega', 'Status', 'Pagamento', 'Condicao', 'Total (R$)'],
-      ...monthOrders.map((o) => [
-        o.orderNumber,
-        o.customerName,
-        o.date,
-        o.deliveryDate,
-        o.status,
-        o.paymentMethod,
-        o.paymentTerm,
-        o.total.toFixed(2),
-      ]),
-    ]);
+  const handleExportReportCsv = (kind: string) => {
+    const t = REPORT_BUILDERS[kind]();
+    downloadCsv(`${kind}_${month}.csv`, [t.columns, ...t.rows]);
   };
 
-  // 2. Compras do mês
-  const handleExportPurchasesCsv = () => {
-    downloadCsv(`compras_${month}.csv`, [
-      ['Compra', 'Fornecedor', 'Data', 'Vencimento', 'Status', 'Total (R$)'],
-      ...purchases
-        .filter((p) => p.date.startsWith(month))
-        .map((p) => [
-          p.purchaseNumber,
-          p.supplierName,
-          p.date,
-          p.dueDate,
-          p.status,
-          p.total.toFixed(2),
-        ]),
-    ]);
-  };
-
-  // 3. Despesas do mês
-  const handleExportExpensesCsv = () => {
-    downloadCsv(`despesas_${month}.csv`, [
-      ['Data', 'Categoria', 'Descricao', 'Pagamento', 'Valor (R$)'],
-      ...expenses
-        .filter((e) => e.date.startsWith(month))
-        .map((e) => [
-          e.date,
-          e.category,
-          e.description,
-          e.paymentMethod,
-          e.amount.toFixed(2),
-        ]),
-    ]);
-  };
-
-  // 4. Extrato de caixa do mês
-  const handleExportCashCsv = () => {
-    downloadCsv(`caixa_${month}.csv`, [
-      ['Data', 'Tipo', 'Categoria', 'Descricao', 'Valor (R$)'],
-      ...cashMovements
-        .filter((m) => m.date.startsWith(month))
-        .map((m) => [
-          m.date,
-          m.type,
-          m.category,
-          m.description,
-          m.amount.toFixed(2),
-        ]),
-    ]);
-  };
-
-  // Resumo geral (mantido para o botão principal)
   const handleExportSummaryCsv = () => {
-    downloadCsv(`fechamento_contabil_${month}.csv`, [
-      ['Indicador Contabil', 'Valor (R$)'],
-      ['Mes', month],
-      ['Faturamento Bruto de Vendas', grossRevenue.toFixed(2)],
-      ['Recebimentos Realizados no Mes', monthCashReceived.toFixed(2)],
-      ['Compras de Mercadorias (Hortifruti)', monthPurchases.toFixed(2)],
-      ['Despesas Operacionais Pagas', monthExpenses.toFixed(2)],
-      ['Contas a Receber em Aberto (Final do Mes)', openRec.toFixed(2)],
-      ['Contas a Pagar em Aberto (Final do Mes)', openPay.toFixed(2)],
-      ['Resultado Financeiro Liquido', netMonthResult.toFixed(2)],
-    ]);
+    const t = buildSummaryTable();
+    downloadCsv(`fechamento_contabil_${month}.csv`, t.rows);
+  };
+
+  const handleExportReportExcel = (kind: string) => {
+    const t = REPORT_BUILDERS[kind]();
+    exportExcel(`${kind}_${month}`, [t], `Relatório ${t.name} — ${formatMonthLabel(month)}`);
+  };
+
+  const handleExportReportPdf = (kind: string) => {
+    const t = REPORT_BUILDERS[kind]();
+    exportPDF({
+      title: t.name,
+      subtitle: 'Sistema G. Less Hortifruti',
+      periodLabel: formatMonthLabel(month),
+      tables: [{ ...t, note: accountantNote }],
+      summary: [
+        { label: 'Faturamento bruto (vendas do mês)', value: fmtBRLForReport(grossRevenue) },
+        { label: 'Recebimentos no caixa', value: fmtBRLForReport(monthCashReceived) },
+        { label: 'Saídas do caixa', value: fmtBRLForReport(monthCashOut) },
+        { label: 'Resultado de caixa do período', value: fmtBRLForReport(netMonthResult) },
+      ],
+    });
+  };
+
+  // Pacote completo (uma planilha com todas as abas / um PDF com todas as seções)
+  const ALL_REPORTS = ['vendas', 'compras', 'despesas', 'caixa'] as const;
+
+  const handleExportPackageExcel = () => {
+    exportExcel(
+      `pacote_contabil_${month}`,
+      [buildSummaryTable(), ...ALL_REPORTS.map((k) => REPORT_BUILDERS[k]())],
+      `Pacote Contábil — ${formatMonthLabel(month)}`
+    );
+  };
+
+  const handleExportPackagePdf = () => {
+    exportPDF({
+      title: 'Pacote Contábil Mensal',
+      subtitle: 'Sistema G. Less Hortifruti',
+      periodLabel: formatMonthLabel(month),
+      tables: [
+        { ...buildSummaryTable(), note: accountantNote },
+        ...ALL_REPORTS.map((k) => REPORT_BUILDERS[k]()),
+      ],
+    });
   };
 
   const handlePrint = () => {
@@ -365,10 +436,13 @@ export const AccountantCenter: React.FC = () => {
           </div>
 
           <div className="rounded-xl border border-purple-200 bg-purple-50/60 p-4">
-            <span className="text-xs font-bold text-purple-900 block">Resultado Líquido do Período:</span>
+            <span className="text-xs font-bold text-purple-900 block">Resultado de Caixa do Período:</span>
             <span className={`text-xl font-black ${netMonthResult >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
               {formatBRL(netMonthResult)}
             </span>
+            <p className="text-[10px] text-purple-700 mt-1">
+              Entradas - saídas do caixa no mês (não é lucro contábil)
+            </p>
           </div>
         </div>
 
@@ -385,29 +459,53 @@ export const AccountantCenter: React.FC = () => {
           </p>
 
           <div className="flex flex-wrap gap-2 pt-1">
+            {ALL_REPORTS.map((kind, idx) => (
+              <div
+                key={kind}
+                className="flex items-center rounded-lg bg-white border border-purple-200 overflow-hidden"
+              >
+                <span className="px-2.5 py-1.5 text-xs font-bold text-purple-900">
+                  {idx + 1}. {kind.charAt(0).toUpperCase() + kind.slice(1)}
+                </span>
+                <button
+                  onClick={() => handleExportReportCsv(kind)}
+                  title="Baixar em CSV"
+                  className="border-l border-purple-100 px-2 py-1.5 text-[10px] font-bold text-purple-700 hover:bg-purple-50"
+                >
+                  CSV
+                </button>
+                <button
+                  onClick={() => handleExportReportExcel(kind)}
+                  title="Baixar em Excel (.xlsx)"
+                  className="border-l border-purple-100 px-2 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50 flex items-center gap-1"
+                >
+                  <FileSpreadsheet className="h-3 w-3" /> Excel
+                </button>
+                <button
+                  onClick={() => handleExportReportPdf(kind)}
+                  title="Baixar em PDF"
+                  className="border-l border-purple-100 px-2 py-1.5 text-[10px] font-bold text-rose-700 hover:bg-rose-50 flex items-center gap-1"
+                >
+                  <FileText className="h-3 w-3" /> PDF
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-purple-100">
             <button
-              onClick={handleExportSalesCsv}
-              className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
+              onClick={handleExportPackageExcel}
+              className="rounded-lg bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs flex items-center gap-1.5"
             >
-              <Download className="h-3.5 w-3.5" /> 1. Relatório de Vendas (CSV)
+              <FileSpreadsheet className="h-4 w-4" />
+              Baixar Pacote Completo (Excel com todas as abas)
             </button>
             <button
-              onClick={handleExportPurchasesCsv}
-              className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
+              onClick={handleExportPackagePdf}
+              className="rounded-lg bg-rose-600 hover:bg-rose-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs flex items-center gap-1.5"
             >
-              <Download className="h-3.5 w-3.5" /> 2. Relatório de Compras (CSV)
-            </button>
-            <button
-              onClick={handleExportExpensesCsv}
-              className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
-            >
-              <Download className="h-3.5 w-3.5" /> 3. Relatório de Despesas (CSV)
-            </button>
-            <button
-              onClick={handleExportCashCsv}
-              className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
-            >
-              <Download className="h-3.5 w-3.5" /> 4. Extrato Bancário / Caixa (CSV)
+              <FileText className="h-4 w-4" />
+              Baixar Pacote Completo (PDF)
             </button>
           </div>
         </div>

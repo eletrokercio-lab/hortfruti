@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatDate, getFinancialStatusBadge } from '../../utils/formatters';
+import { exportExcel, exportPDF, ReportTable, fmtBRLForReport } from '../../utils/reportExporters';
 import { PaymentMethod, PayableCategory } from '../../types';
 
 export const FinanceView: React.FC = () => {
@@ -45,7 +46,95 @@ export const FinanceView: React.FC = () => {
   const [expenseMethod, setExpenseMethod] = useState<PaymentMethod>('pix');
   const [expenseReceipt, setExpenseReceipt] = useState('');
 
-  // Cash Flow Calculations
+  // ===== Fluxo de Caixa: período, saldo acumulado e exportação =====
+  const [cashPeriod, setCashPeriod] = useState<string>(() =>
+    new Date().toISOString().slice(0, 7)
+  );
+
+  const cashMonths = React.useMemo(() => {
+    const months = new Set<string>();
+    cashMovements.forEach((m) => months.add(String(m.date).slice(0, 7)));
+    months.add(new Date().toISOString().slice(0, 7));
+    return Array.from(months).sort().reverse();
+  }, [cashMovements]);
+
+  const formatMonthLabel = (m: string) => {
+    const [y, mo] = m.split('-');
+    const names = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    return `${names[parseInt(mo, 10) - 1] || mo} / ${y}`;
+  };
+
+  const periodMovements = cashMovements.filter(
+    (m) => cashPeriod === 'todos' || m.date.startsWith(cashPeriod)
+  );
+
+  // Saldo acumulado na ordem cronológica
+  const periodSortedAsc = [...periodMovements].sort((a, b) =>
+    a.date === b.date ? 0 : a.date < b.date ? -1 : 1
+  );
+  let runningBalance = 0;
+  const movementBalance = new Map<string, number>();
+  for (const m of periodSortedAsc) {
+    runningBalance += m.type === 'entrada' ? m.amount : -m.amount;
+    movementBalance.set(m.id, runningBalance);
+  }
+
+  const periodIn = periodMovements
+    .filter((m) => m.type === 'entrada')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+  const periodOut = periodMovements
+    .filter((m) => m.type === 'saida')
+    .reduce((acc, curr) => acc + curr.amount, 0);
+  const periodResult = periodIn - periodOut;
+
+  const periodLabel =
+    cashPeriod === 'todos' ? 'Todo o histórico' : formatMonthLabel(cashPeriod);
+
+  const handleExportCashExcel = () => {
+    const table: ReportTable = {
+      name: 'Fluxo de Caixa',
+      columns: ['Data', 'Tipo', 'Categoria', 'Descrição', 'Valor (R$)', 'Saldo Acumulado (R$)'],
+      rows: periodSortedAsc.map((m) => [
+        formatDate(m.date),
+        m.type === 'entrada' ? 'Entrada' : 'Saída',
+        m.category.replace('_', ' '),
+        m.description,
+        `${m.type === 'entrada' ? '+' : '-'} ${m.amount.toFixed(2).replace('.', ',')}`,
+        (movementBalance.get(m.id) || 0).toFixed(2).replace('.', ','),
+      ]),
+    };
+    exportExcel(`fluxo_de_caixa_${cashPeriod}`, [table], `Fluxo de Caixa — ${periodLabel}`);
+  };
+
+  const handleExportCashPdf = () => {
+    exportPDF({
+      title: 'Fluxo de Caixa',
+      subtitle: 'Sistema G. Less Hortifruti',
+      periodLabel,
+      tables: [
+        {
+          name: `Movimentações (${periodMovements.length} lançamentos)`,
+          columns: ['Data', 'Tipo', 'Categoria', 'Descrição', 'Valor (R$)', 'Saldo (R$)'],
+          rows: periodSortedAsc.map((m) => [
+            formatDate(m.date),
+            m.type === 'entrada' ? 'Entrada' : 'Saída',
+            m.category.replace('_', ' '),
+            m.description,
+            `${m.type === 'entrada' ? '+' : '-'} ${m.amount.toFixed(2).replace('.', ',')}`,
+            (movementBalance.get(m.id) || 0).toFixed(2).replace('.', ','),
+          ]),
+          note: 'Saldo acumulado considera apenas os lançamentos do período selecionado.',
+        },
+      ],
+      summary: [
+        { label: 'Entradas do período', value: fmtBRLForReport(periodIn) },
+        { label: 'Saídas do período', value: fmtBRLForReport(periodOut) },
+        { label: 'Resultado do período', value: fmtBRLForReport(periodResult) },
+      ],
+    });
+  };
+
+  // Cash Flow Calculations (geral, independente do filtro)
   const totalIn = cashMovements
     .filter((m) => m.type === 'entrada')
     .reduce((acc, curr) => acc + curr.amount, 0);
@@ -368,44 +457,112 @@ export const FinanceView: React.FC = () => {
 
       {/* Tab 4: Fluxo de Caixa (PRD §24) */}
       {activeTab === 'cash' && (
-        <div className="rounded-2xl border border-gray-200 bg-white shadow-2xs overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-semibold">
-                  <th className="py-3 px-4">Data</th>
-                  <th className="py-3 px-4">Tipo</th>
-                  <th className="py-3 px-4">Categoria</th>
-                  <th className="py-3 px-4">Descrição do Lançamento</th>
-                  <th className="py-3 px-4 text-right">Valor</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {cashMovements.map((mov) => (
-                  <tr key={mov.id} className="hover:bg-gray-50/60">
-                    <td className="py-3 px-4 text-gray-500">{formatDate(mov.date)}</td>
-                    <td className="py-3 px-4">
-                      {mov.type === 'entrada' ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
-                          <ArrowDownRight className="h-3 w-3" /> Entrada
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
-                          <ArrowUpRight className="h-3 w-3" /> Saída
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 capitalize text-gray-600">{mov.category.replace('_', ' ')}</td>
-                    <td className="py-3 px-4 text-gray-800 font-medium">{mov.description}</td>
-                    <td className="py-3 px-4 text-right font-black">
-                      <span className={mov.type === 'entrada' ? 'text-emerald-700' : 'text-rose-700'}>
-                        {mov.type === 'entrada' ? '+' : '-'} {formatBRL(mov.amount)}
-                      </span>
-                    </td>
+        <div className="space-y-4">
+          {/* Barra de período e exportação */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 shadow-2xs">
+            <div className="flex flex-wrap items-center gap-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block">
+                  Período
+                </label>
+                <select
+                  value={cashPeriod}
+                  onChange={(e) => setCashPeriod(e.target.value)}
+                  className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-900 focus:outline-hidden"
+                >
+                  {cashMonths.map((m) => (
+                    <option key={m} value={m}>
+                      {formatMonthLabel(m)}
+                    </option>
+                  ))}
+                  <option value="todos">Todo o histórico</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-4 pt-2 sm:pt-2">
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-emerald-600 block">Entradas</span>
+                  <span className="text-sm font-black text-emerald-700">{formatBRL(periodIn)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-rose-600 block">Saídas</span>
+                  <span className="text-sm font-black text-rose-700">{formatBRL(periodOut)}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] font-bold uppercase text-gray-400 block">Resultado</span>
+                  <span className={`text-sm font-black ${periodResult >= 0 ? 'text-emerald-700' : 'text-rose-700'}`}>
+                    {formatBRL(periodResult)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleExportCashExcel}
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+              >
+                Excel
+              </button>
+              <button
+                onClick={handleExportCashPdf}
+                className="flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-bold text-rose-800 hover:bg-rose-100"
+              >
+                PDF
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-gray-200 bg-white shadow-2xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-gray-200 bg-gray-50 text-gray-600 font-semibold">
+                    <th className="py-3 px-4">Data</th>
+                    <th className="py-3 px-4">Tipo</th>
+                    <th className="py-3 px-4">Categoria</th>
+                    <th className="py-3 px-4">Descrição do Lançamento</th>
+                    <th className="py-3 px-4 text-right">Valor</th>
+                    <th className="py-3 px-4 text-right">Saldo Acumulado</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {periodMovements.map((mov) => (
+                    <tr key={mov.id} className="hover:bg-gray-50/60">
+                      <td className="py-3 px-4 text-gray-500">{formatDate(mov.date)}</td>
+                      <td className="py-3 px-4">
+                        {mov.type === 'entrada' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-bold text-emerald-800">
+                            <ArrowDownRight className="h-3 w-3" /> Entrada
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-bold text-rose-800">
+                            <ArrowUpRight className="h-3 w-3" /> Saída
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 capitalize text-gray-600">{mov.category.replace('_', ' ')}</td>
+                      <td className="py-3 px-4 text-gray-800 font-medium">{mov.description}</td>
+                      <td className="py-3 px-4 text-right font-black">
+                        <span className={mov.type === 'entrada' ? 'text-emerald-700' : 'text-rose-700'}>
+                          {mov.type === 'entrada' ? '+' : '-'} {formatBRL(mov.amount)}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right font-bold text-gray-700">
+                        {formatBRL(movementBalance.get(mov.id) || 0)}
+                      </td>
+                    </tr>
+                  ))}
+                  {periodMovements.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-gray-400 text-xs">
+                        Nenhuma movimentação no período selecionado.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
