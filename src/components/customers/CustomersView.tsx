@@ -8,6 +8,7 @@ import {
   MessageCircle,
   CreditCard,
   ChevronRight,
+  Trash2,
   X,
   Layers,
 } from 'lucide-react';
@@ -24,7 +25,17 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
   onSelectCustomer,
   onOpenNewOrderForCustomer,
 }) => {
-  const { customers, createCustomer, getCustomerCrateBalance } = useApp();
+  const { customers, createCustomer, getCustomerCrateBalance, deleteCustomer } = useApp();
+
+  const handleDeleteCustomer = (cust: Customer) => {
+    if (
+      window.confirm(
+        `Excluir o cliente "${cust.name}"?\n\nO cadastro, os preços exclusivos e as promoções dele serão removidos. O histórico de pedidos antigos é mantido.`
+      )
+    ) {
+      deleteCustomer(cust.id);
+    }
+  };
 
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
@@ -157,9 +168,21 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
                       )}
                       <p className="text-[11px] text-gray-400 font-mono mt-0.5">Doc: {cust.document}</p>
                     </div>
-                    <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
-                      {cust.status === 'active' ? 'Ativo' : 'Inativo'}
-                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-800 border border-emerald-200">
+                        {cust.status === 'active' ? 'Ativo' : 'Inativo'}
+                      </span>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteCustomer(cust);
+                        }}
+                        title="Excluir cliente"
+                        className="rounded-lg border border-rose-200 bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="rounded-xl bg-gray-50 p-2.5 text-xs text-gray-700 space-y-1">

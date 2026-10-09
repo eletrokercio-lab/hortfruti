@@ -216,13 +216,22 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       );
     if (cpRes.data)
       setCustomPrices(
-        (cpRes.data as any[]).map((cp) => ({
-          id: cp.id,
-          customerId: cp.customer_id,
-          productId: cp.product_id,
-          price: Number(cp.price),
-          updatedAt: cp.updated_at || '',
-        }))
+        // Dedupe: mantém o preço mais recente por produto (linhas antigas de
+        // alterações anteriores não podem "ganhar" na busca do getPrice)
+        Object.values(
+          (cpRes.data as any[]).reduce<Record<string, CustomPrice>>((acc, cp) => {
+            const mapped: CustomPrice = {
+              id: cp.id,
+              customerId: cp.customer_id,
+              productId: cp.product_id,
+              price: Number(cp.price),
+              updatedAt: cp.updated_at || '',
+            };
+            const current = acc[mapped.productId];
+            if (!current || mapped.updatedAt >= current.updatedAt) acc[mapped.productId] = mapped;
+            return acc;
+          }, {})
+        )
       );
     if (promoRes.data)
       setPromotions(

@@ -201,14 +201,23 @@ export const liveSync = {
         notes: r.notes || undefined,
       }));
 
-      // Preços especiais
-      const customPrices: CustomPrice[] = (customPricesRes.data || []).map((cp: any) => ({
-        id: cp.id,
-        customerId: cp.customer_id,
-        productId: cp.product_id,
-        price: Number(cp.price),
-        updatedAt: cp.updated_at || '',
-      }));
+      // Preços especiais (dedupe: mantém o mais recente por cliente+produto,
+      // caso existam linhas antigas duplicadas de alterações anteriores)
+      const customPrices: CustomPrice[] = Object.values(
+        (customPricesRes.data || []).reduce<Record<string, CustomPrice>>((acc, cp: any) => {
+          const mapped: CustomPrice = {
+            id: cp.id,
+            customerId: cp.customer_id,
+            productId: cp.product_id,
+            price: Number(cp.price),
+            updatedAt: cp.updated_at || '',
+          };
+          const key = `${mapped.customerId}|${mapped.productId}`;
+          const current = acc[key];
+          if (!current || mapped.updatedAt >= current.updatedAt) acc[key] = mapped;
+          return acc;
+        }, {})
+      );
 
       // Promoções
       const promotions: Promotion[] = (promotionsRes.data || []).map((p: any) => ({
@@ -477,6 +486,13 @@ export const liveSync = {
     const client = getSupabaseClient();
     if (!client) return;
     try {
+      // Remove registros antigos do mesmo produto/cliente (cada alteração
+      // gerava uma linha nova e a antiga podia "ganhar" na leitura)
+      await client
+        .from('custom_prices')
+        .delete()
+        .eq('customer_id', cp.customerId)
+        .eq('product_id', cp.productId);
       await client.from('custom_prices').upsert({
         id: cp.id,
         customer_id: cp.customerId,

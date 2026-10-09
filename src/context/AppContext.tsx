@@ -157,6 +157,8 @@ interface AppContextType {
   createSupplier: (data: Omit<Supplier, 'id'>) => Supplier;
   updateSupplier: (supplier: Supplier) => void;
 
+  deleteCustomer: (customerId: string) => void;
+
   createExpense: (expense: Omit<Expense, 'id'>) => Expense;
   receivePayment: (receivableId: string, amount: number, paymentMethod: PaymentMethod) => void;
   payBill: (payableId: string, paymentMethod: PaymentMethod) => void;
@@ -1297,6 +1299,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSuppliers((prev) => prev.map((s) => (s.id === supplier.id ? supplier : s)));
   };
 
+  // Excluir cliente: remove cadastro, preços exclusivos e promoções dele.
+  // O histórico de pedidos é preservado (guarda o nome do cliente).
+  const deleteCustomer = (customerId: string) => {
+    setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+    setCustomPrices((prev) => prev.filter((cp) => cp.customerId !== customerId));
+    setPromotions((prev) => prev.filter((pr) => pr.customerId !== customerId));
+    (async () => {
+      const { getSupabaseClient } = await import('../lib/supabase');
+      const client = getSupabaseClient();
+      if (!client) return;
+      try {
+        await client.from('custom_prices').delete().eq('customer_id', customerId);
+        await client.from('promotions').delete().eq('customer_id', customerId);
+        // Login do cliente excluído fica bloqueado (perfil mantido para auditoria)
+        await client
+          .from('app_profiles')
+          .update({ status: 'bloqueado', customer_id: null })
+          .eq('customer_id', customerId);
+        await client.from('customers').delete().eq('id', customerId);
+      } catch {
+        // silencioso: estado local já foi atualizado
+      }
+    })();
+  };
+
   // Expenses & Cash Flow
   const createExpense = (expenseData: Omit<Expense, 'id'>): Expense => {
     const newExpense: Expense = {
@@ -1641,6 +1668,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         createSupplier,
         updateSupplier,
+
+        deleteCustomer,
 
         createExpense,
         receivePayment,
