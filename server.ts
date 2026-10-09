@@ -640,6 +640,20 @@ Use SOMENTE productId de productsList. Se houver mais de um produto com nome par
 {"type":"EXECUTE_SET_CUSTOMER_PRICE","label":"Preço especial de <produto> para <cliente>: R$ <valor>","tab":"customers","data":{"customerId":"id de customersList","productId":"id de productsList","price":preco_especial}}
 Regra de ouro: o preço especial vale APENAS para esse cliente (tabela própria/promocional); para mudar o preço de todos, use a ação 6. Se faltar o cliente ou o produto, pergunte.
 
+== DETECÇÃO DE INTENÇÃO (REGRA OBRIGATÓRIA — NUNCA IGNORE) ==
+Se o usuário pedir para FAZER/MUDAR/CADASTRAR/AJUSTAR algo, a action DEVE ser do tipo EXECUTE_* correspondente. NUNCA responda um pedido de execução com NAVIGATE_* (isso é falha grave). NAVIGATE_* é APENAS quando o usuário pede para VER/ABRIR/MOSTRAR uma tela.
+Mapa de frases → ação (aplicado antes de qualquer outra consideração):
+• "ajuste o [produto] para R$X" + "para o cliente [nome]" → EXECUTE_SET_CUSTOMER_PRICE (preço especial daquele cliente; price = X)
+• "preço especial de [produto] para [cliente]" → EXECUTE_SET_CUSTOMER_PRICE
+• "mude/altere o preço do [produto] para R$X" (sem citar cliente) → EXECUTE_UPDATE_PRODUCT_PRICE (muda para todos)
+• "cadastra o produto [nome]" → EXECUTE_CREATE_PRODUCT
+• "solicita/pede/faz a colheita de [produto]" → EXECUTE_CREATE_HARVEST (aplique a REGRA DO FORNECEDOR)
+• "envie/delega a entrega [nº] para [entregador]" → EXECUTE_ASSIGN_DELIVERY
+• "marca/muda o pedido [nº] para [status]" → EXECUTE_ORDER_STATUS
+• "registra/recebi o pagamento de [cliente]" → EXECUTE_RECEIVE_PAYMENT
+Exemplo resolvido: usuário diz "ajuste o abacaxi para o preço de 54,00 cx, para cliente Supermercado Central" → action = {"type":"EXECUTE_SET_CUSTOMER_PRICE","label":"Preço especial de ABACAXI para Supermercado Central: R$ 54,00/cx","tab":"customers","data":{"customerId":"id do Supermercado Central em customersList","productId":"id do ABACAXI em productsList","price":54}}
+No "answer" explique o que vai ser feito em 1 frase e diga para confirmar no botão.
+
 Para apenas MOSTRAR uma tela use action com type/t/tab:
 {"type":"NAVIGATE_ORDERS|NAVIGATE_DELIVERIES|NAVIGATE_PRODUCTS|NAVIGATE_CUSTOMERS|NAVIGATE_PLANNING|NAVIGATE_PLANNING_PURCHASE|NAVIGATE_PLANNING_HARVEST|NAVIGATE_CRATES|NAVIGATE_SUPPLIERS|NAVIGATE_RECEIVABLES_OVERDUE|NAVIGATE_ACCOUNTANT|NAVIGATE_DASHBOARD","label":"texto do botão","tab":"orders|deliveries|products|customers|planning|crates|suppliers|finance|accountant|dashboard"}
 Se for só pergunta/informação: action null.
@@ -702,10 +716,44 @@ ${JSON.stringify(systemContext || {}, null, 2)}
           // resposta veio como texto puro — cai na detecção por palavra-chave abaixo
         }
 
-        // Fallback: se a IA não propôs ação, detecta navegação pelo tema da pergunta
+        // Fallback: se a IA não propôs ação, detecta execução/navegação pelo tema da pergunta
         if (!suggestedAction) {
           const qLower = question.toLowerCase();
-          const navActions: { keywords: string[]; action: { type: string; label: string; tab: string } }[] = [
+          const sysCtx: any = systemContext || {};
+          const products: any[] = Array.isArray(sysCtx.productsList) ? sysCtx.productsList : [];
+          const customers: any[] = Array.isArray(sysCtx.customersList) ? sysCtx.customersList : [];
+
+          const findProduct = () =>
+            products.find((p) => qLower.includes(String(p.name).toLowerCase().split(' ')[0]));
+          const findCustomer = () =>
+            customers.find((c) => qLower.includes(String(c.name).toLowerCase()));
+
+          // Pedido de ajuste de preço: com cliente citado = preço especial; sem = tabela base
+          const mentionsPriceChange = /\b(ajust|alter|troc|mud|defin)\w*\s+(o\s+)?pre|pre[çc]o\s+especial|mud[ae].*pre[çc]o|pre[çc]o.*para\s*r?\$?\s*\d/i.test(qLower);
+          const priceMatch = qLower.match(/(\d+[.,]?\d*)/);
+          if (mentionsPriceChange && priceMatch) {
+            const price = Number(priceMatch[1].replace(',', '.'));
+            const product = findProduct();
+            const customer = findCustomer();
+            if (product && customer && price > 0) {
+              suggestedAction = {
+                type: 'EXECUTE_SET_CUSTOMER_PRICE',
+                label: `Preço especial de ${product.name} para ${customer.name}: R$ ${price.toFixed(2)}/${product.unit}`,
+                tab: 'customers',
+                data: { customerId: customer.customerId, productId: product.productId, price },
+              };
+            } else if (product && price > 0 && !qLower.includes('cliente')) {
+              suggestedAction = {
+                type: 'EXECUTE_UPDATE_PRODUCT_PRICE',
+                label: `Alterar preço de ${product.name} para R$ ${price.toFixed(2)}/${product.unit}`,
+                tab: 'products',
+                data: { productId: product.productId, defaultPrice: price },
+              };
+            }
+          }
+
+          if (!suggestedAction) {
+            const navActions: { keywords: string[]; action: { type: string; label: string; tab: string } }[] = [
             { keywords: ['comprar', 'necessidade de compra', 'compra de fornecedor'], action: { type: 'NAVIGATE_PLANNING_PURCHASE', label: 'Ver Necessidades e Resolver Compras', tab: 'planning' } },
             { keywords: ['colheita', 'colher'], action: { type: 'NAVIGATE_PLANNING_HARVEST', label: 'Ver Planejamento de Colheita', tab: 'planning' } },
             { keywords: ['mercadoria', 'estoque', 'falta mercador'], action: { type: 'NAVIGATE_PLANNING', label: 'Ver Planejamento de Necessidades', tab: 'planning' } },
@@ -723,6 +771,7 @@ ${JSON.stringify(systemContext || {}, null, 2)}
               suggestedAction = nav.action;
               break;
             }
+          }
           }
         }
 
