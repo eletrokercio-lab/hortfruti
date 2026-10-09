@@ -1500,6 +1500,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setCurrentTab('orders');
         break;
       }
+      // Cadastrar mercadoria nova (valida unidade e categoria)
+      case 'EXECUTE_CREATE_PRODUCT': {
+        const name = String(data.name || '').trim();
+        const validUnits = ['kg', 'cx', 'un', 'saco', 'bandeja', 'duzia'];
+        const validCats = ['frutas', 'legumes', 'verduras', 'folhagens', 'temperos', 'tuberculos'];
+        if (name && validUnits.includes(data.unit) && validCats.includes(data.category)) {
+          createProduct({
+            name,
+            category: data.category,
+            unit: data.unit,
+            salesType: data.unit === 'kg' ? 'peso' : data.unit === 'cx' ? 'caixa' : 'unidade',
+            defaultPrice: Number(data.defaultPrice) || 0,
+            avgCost: Number(data.avgCost) || 0,
+            origin: String(data.origin || 'Fornecedor'),
+            status: 'active',
+          });
+        }
+        setCurrentTab('products');
+        break;
+      }
+      // Alterar preço padrão de um produto (valida que existe)
+      case 'EXECUTE_UPDATE_PRODUCT_PRICE': {
+        const product = products.find((p) => p.id === data.productId);
+        const newPrice = Number(data.defaultPrice);
+        if (product && newPrice > 0) {
+          updateProduct({ ...product, defaultPrice: newPrice });
+        }
+        setCurrentTab('products');
+        break;
+      }
+      // Preço especial para um cliente específico (valida cliente e produto)
+      case 'EXECUTE_SET_CUSTOMER_PRICE': {
+        const customer = customers.find((c) => c.id === data.customerId);
+        const product = products.find((p) => p.id === data.productId);
+        const price = Number(data.price);
+        if (customer && product && price > 0) {
+          setCustomerCustomPrice(customer.id, product.id, price);
+        }
+        setCurrentTab('customers');
+        break;
+      }
       // Registrar recebimento (valida conta e valor)
       case 'EXECUTE_RECEIVE_PAYMENT': {
         if (

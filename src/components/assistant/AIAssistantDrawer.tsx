@@ -199,7 +199,10 @@ export const AIAssistantDrawer: React.FC = () => {
         .filter((r) => r.status !== 'pago')
         .slice(0, 40)
         .map((r) => ({ receivableId: r.id, customer: r.customerName, amount: r.amount, due: r.dueDate, status: r.status })),
-      productsList: products.map((p) => ({ productId: p.id, name: p.name, unit: p.unit })),
+      productsList: products
+        .filter((p) => p.status === 'active')
+        .map((p) => ({ productId: p.id, name: p.name, unit: p.unit, category: p.category, defaultPrice: p.defaultPrice })),
+      customersList: customers.map((c) => ({ customerId: c.id, name: c.name })),
       suppliersList: suppliers.map((s) => ({
         supplierId: s.id,
         name: s.name,

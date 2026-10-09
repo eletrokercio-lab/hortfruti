@@ -619,7 +619,7 @@ O usuário atual está APRENDENDO a operar o sistema. Seja um treinador paciente
 • Conferir vasilhames de um cliente: menu VASILHAMES → buscar o cliente → ver saldo e histórico.
 
 == AÇÕES QUE VOCÊ PODE PROPOR (executadas só após o usuário confirmar) ==
-Se o usuário PEDIR PARA FAZER algo (ex.: "envie o pedido PED-123 para entrega", "faça o pedido de colheita do tomate", "marque o pedido como em rota", "recebi o pagamento do X"), inclua em "action" UM dos objetos abaixo, usando IDs EXATOS do contexto (pendingDeliveries, drivers, ordersList, receivablesList, productsList). Quantias são números. Se faltar algum dado para montar a ação, pergunte no "answer" e mande action null.
+Se o usuário PEDIR PARA FAZER algo (ex.: "envie o pedido PED-123 para entrega", "faça o pedido de colheita do tomate", "marque o pedido como em rota", "recebi o pagamento do X", "cadastra a manga palmer", "muda o preço do tomate para 8 reais", "preço especial da batata para o Supermercado Central"), inclua em "action" UM dos objetos abaixo, usando IDs EXATOS do contexto (pendingDeliveries, drivers, ordersList, receivablesList, productsList, customersList, suppliersList). Quantias são números. Se faltar algum dado para montar a ação, pergunte no "answer" e mande action null.
 
 1) Enviar/delegar entrega para um entregador:
 {"type":"EXECUTE_ASSIGN_DELIVERY","label":"Delegar entrega <nº pedido> para <nome>","tab":"deliveries","data":{"deliveryId":"id de pendingDeliveries","driverProfileId":"id de drivers","driverName":"nome do entregador"}}
@@ -630,6 +630,15 @@ REGRA DO FORNECEDOR NA COLHEITA: se o usuário citar o nome do fornecedor/produt
 {"type":"EXECUTE_ORDER_STATUS","label":"Marcar pedido <nº> como <status>","tab":"orders","data":{"orderId":"id de ordersList","status":"pendente|em_separacao|pronto|em_rota|entregue|cancelado"}}
 4) Registrar recebimento de pagamento:
 {"type":"EXECUTE_RECEIVE_PAYMENT","label":"Registrar pagamento de <cliente>","tab":"finance","data":{"receivableId":"id de receivablesList","amount":valor,"paymentMethod":"pix|vista|prazo"}}
+5) Cadastrar mercadoria nova:
+{"type":"EXECUTE_CREATE_PRODUCT","label":"Cadastrar <nome do produto>","tab":"products","data":{"name":"nome em maiúsculas ou como o usuário disse","unit":"kg|cx|un|saco|bandeja|duzia","category":"frutas|legumes|verduras|folhagens|temperos|tuberculos","defaultPrice":preco_de_venda,"avgCost":custo_estimado,"origin":"Fornecedor|Próprio"}}
+Se o usuário NÃO informar unidade, categoria ou preço, PERGUNTE no "answer" antes de propor a ação (ex.: "Qual o preço de venda da caixa?"). Categoria: frutas, legumes, verduras, folhagens, temperos, tuberculos. Se o preço for 0, cadastre e avise que o preço pode ser ajustado depois.
+6) Alterar preço padrão (tabela base) de um produto:
+{"type":"EXECUTE_UPDATE_PRODUCT_PRICE","label":"Alterar preço de <produto> para R$ <valor>","tab":"products","data":{"productId":"id de productsList","defaultPrice":novo_preco}}
+Use SOMENTE productId de productsList. Se houver mais de um produto com nome parecido, mostre as opções e pergunte qual é.
+7) Definir preço especial para um cliente específico:
+{"type":"EXECUTE_SET_CUSTOMER_PRICE","label":"Preço especial de <produto> para <cliente>: R$ <valor>","tab":"customers","data":{"customerId":"id de customersList","productId":"id de productsList","price":preco_especial}}
+Regra de ouro: o preço especial vale APENAS para esse cliente (tabela própria/promocional); para mudar o preço de todos, use a ação 6. Se faltar o cliente ou o produto, pergunte.
 
 Para apenas MOSTRAR uma tela use action com type/t/tab:
 {"type":"NAVIGATE_ORDERS|NAVIGATE_DELIVERIES|NAVIGATE_PRODUCTS|NAVIGATE_CUSTOMERS|NAVIGATE_PLANNING|NAVIGATE_PLANNING_PURCHASE|NAVIGATE_PLANNING_HARVEST|NAVIGATE_CRATES|NAVIGATE_SUPPLIERS|NAVIGATE_RECEIVABLES_OVERDUE|NAVIGATE_ACCOUNTANT|NAVIGATE_DASHBOARD","label":"texto do botão","tab":"orders|deliveries|products|customers|planning|crates|suppliers|finance|accountant|dashboard"}
@@ -656,6 +665,9 @@ ${JSON.stringify(systemContext || {}, null, 2)}
           'EXECUTE_CREATE_HARVEST',
           'EXECUTE_ORDER_STATUS',
           'EXECUTE_RECEIVE_PAYMENT',
+          'EXECUTE_CREATE_PRODUCT',
+          'EXECUTE_UPDATE_PRODUCT_PRICE',
+          'EXECUTE_SET_CUSTOMER_PRICE',
           'NAVIGATE_ORDERS',
           'NAVIGATE_DELIVERIES',
           'NAVIGATE_PRODUCTS',
