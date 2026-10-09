@@ -270,20 +270,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_AI_LOGS;
   });
 
-  // Sincronização em tempo real: dados do Supabase sobrepõem o cache local
+  // Sincronização com o Supabase: o banco é a fonte da verdade. Na carga
+  // inicial, SUBSTITUI sempre (mesmo com banco vazio) para nunca misturar
+  // dados de teste locais com os dados reais da operação.
   useEffect(() => {
     (async () => {
       const { liveSync } = await import('../services/liveSync');
-      if (!liveSync.isAvailable()) return;
       const remote = await liveSync.pullAll();
-      if (remote.products.length > 0) setProducts(remote.products);
-      if (remote.customers.length > 0) setCustomers(remote.customers);
-      if (remote.orders.length > 0) setOrders(remote.orders);
-      if (remote.deliveries.length > 0) setDeliveries(remote.deliveries);
-      if (remote.receivables.length > 0) setReceivables(remote.receivables);
-      if (remote.customPrices.length > 0) setCustomPrices(remote.customPrices);
-      if (remote.promotions.length > 0) setPromotions(remote.promotions);
-      if (remote.crates.length > 0) setCrates(remote.crates);
+      if (!remote) return; // sem conexão/config: mantém o estado local
+      setProducts(remote.products);
+      setCustomers(remote.customers);
+      setOrders(remote.orders);
+      setDeliveries(remote.deliveries);
+      setReceivables(remote.receivables);
+      setCustomPrices(remote.customPrices);
+      setPromotions(remote.promotions);
+      setCrates(remote.crates);
     })();
   }, []);
 
@@ -293,12 +295,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let cancelled = false;
     const pollData = async () => {
       const { liveSync } = await import('../services/liveSync');
-      if (!liveSync.isAvailable()) return;
       const remote = await liveSync.pullAll();
-      if (cancelled) return;
-      if (remote.orders.length > 0) setOrders(remote.orders);
-      if (remote.deliveries.length > 0) setDeliveries(remote.deliveries);
-      if (remote.receivables.length > 0) setReceivables(remote.receivables);
+      if (cancelled || !remote) return;
+      setOrders(remote.orders);
+      setDeliveries(remote.deliveries);
+      setReceivables(remote.receivables);
     };
     const poll = setInterval(pollData, 25000);
     const onVisible = () => {

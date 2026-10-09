@@ -52,10 +52,12 @@ export const liveSync = {
     customPrices: CustomPrice[];
     promotions: Promotion[];
     crates: CrateRecord[];
-  }> => {
+  } | null> => {
     const client = getSupabaseClient();
     const empty = { orders: [], deliveries: [], products: [], customers: [], receivables: [], customPrices: [], promotions: [], crates: [] };
-    if (!client) return empty;
+    // null = leitura indisponível (sem config ou erro de rede): o chamador
+    // mantém o estado atual. Objeto vazio = banco realmente sem registros.
+    if (!client) return null;
 
     try {
       const [ordersRes, itemsRes, deliveriesRes, productsRes, customersRes, receivablesRes, customPricesRes, promotionsRes, cratesRes] =
@@ -238,7 +240,7 @@ export const liveSync = {
 
       return { orders, deliveries, products, customers, receivables, customPrices, promotions, crates };
     } catch {
-      return empty;
+      return null;
     }
   },
 
