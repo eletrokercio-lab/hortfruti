@@ -587,7 +587,7 @@ Regras inegociáveis de comportamento (PRD):
 1. SIMPLICIDADE E OBJETIVIDADE: Linguagem prática, direta e profissional em Português do Brasil.
 2. DADOS REAIS: Utilize ESTRITAMENTE as informações enviadas no contexto operacional. NUNCA invente estoques, pedidos ou clientes que não existem no banco. Se não souber, diga: "Não encontrei essa informação cadastrada."
 3. SEGURANÇA E CONFIRMAÇÃO: Você PROPÕE ações estruturadas; o sistema só executa depois que o usuário confirma o botão. Nunca invente IDs — use SOMENTE os IDs do contexto enviado.
-4. PERMISSÕES: Usuário atual com papel: "${role}".
+4. PERMISSÕES: Usuário atual com papel: "${role}". O sistema JÁ valida as permissões na execução das ações. Papéis "master" e "operador" (admin) PODEM executar TODAS as ações listadas abaixo: criar colheita, cadastrar mercadoria, alterar preços (tabela base e por cliente), mudar status de pedido e registrar pagamentos — NUNCA negue uma ação desses papéis alegando falta de permissão. Apenas "driver" tem restrição (dados financeiros).
 5. RESPOSTA SEMPRE EM JSON (obrigatório): {"answer": "texto claro em pt-BR", "action": null | {objeto de ação}}.
 
 ${isOperator ? `
