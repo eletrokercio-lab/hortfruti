@@ -27,12 +27,14 @@ interface OrderDetailModalProps {
   order: Order | null;
   isOpen: boolean;
   onClose: () => void;
+  initialDriverPick?: boolean;
 }
 
 export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   order,
   isOpen,
   onClose,
+  initialDriverPick,
 }) => {
   const { updateOrderStatus, setDeliveryAssignment, deliveries, setCurrentTab } = useApp();
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
@@ -54,11 +56,12 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     })();
   }, [isOpen]);
 
-  // Fecha painéis auxiliares ao trocar de pedido
+  // Fecha painéis auxiliares ao abrir/trocar de pedido
+  // (initialDriverPick=true abre direto no seletor de entregador)
   useEffect(() => {
-    setShowDriverPick(false);
+    setShowDriverPick(!!isOpen && !!initialDriverPick && !!order);
     setAssignDone(null);
-  }, [order?.id]);
+  }, [isOpen, order?.id, initialDriverPick]);
 
   if (!isOpen || !order) return null;
 

@@ -22,6 +22,7 @@ import {
   Loader2,
   ClipboardList,
   Bell,
+  RefreshCw,
 } from 'lucide-react';
 import { getSupabaseClient } from '../../lib/supabase';
 import { playNotificationSound } from '../../utils/notify';
@@ -413,6 +414,31 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       else next[productId] = q;
       return next;
     });
+  };
+
+  // Repetir pedido: carrega os itens de um pedido anterior no carrinho
+  // (preços são recalculados com a tabela/promoção atual do cliente)
+  const handleRepeatOrder = (orderId: string) => {
+    const items = orderItems[orderId] || [];
+    const newCart: Record<string, number> = {};
+    let missing = 0;
+    for (const it of items) {
+      const prod = products.find((p) => p.id === it.productId || p.name === it.productName);
+      if (prod && Number(it.quantity) > 0) {
+        newCart[prod.id] = (newCart[prod.id] || 0) + Number(it.quantity);
+      } else {
+        missing++;
+      }
+    }
+    if (Object.keys(newCart).length === 0) {
+      alert('Nenhum item deste pedido está mais disponível no catálogo.');
+      return;
+    }
+    setCart(newCart);
+    setCartOpen(true);
+    if (missing > 0) {
+      alert(`${missing} item(ns) não estão mais no catálogo e foram ignorados.`);
+    }
   };
 
   const handleCheckout = async () => {
@@ -859,6 +885,14 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                       </p>
                     </div>
                   </div>
+
+                  <button
+                    onClick={() => handleRepeatOrder(o.id)}
+                    className="mt-2 flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    Repetir pedido
+                  </button>
 
                   {/* Linha do tempo do status */}
                   <div className="mt-3 flex items-center">

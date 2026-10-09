@@ -11,6 +11,7 @@ import {
   Layers,
   Search,
   UserCog,
+  Printer,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { getSupabaseClient } from '../../lib/supabase';
@@ -58,6 +59,96 @@ export const DeliveriesManagement: React.FC = () => {
   });
 
   const uniqueDrivers = Array.from(new Set(deliveries.map((d) => d.driverName)));
+
+  // ===== Lista de Separação por entregador =====
+  const pendingByDriver = deliveries.filter((d) => d.status !== 'entregue');
+  const driversWithPending = Array.from(
+    new Set(pendingByDriver.map((d) => d.driverName || 'Não delegadas'))
+  );
+
+  const handlePrintSeparation = (driver: string) => {
+    const list = pendingByDriver.filter((d) => (d.driverName || 'Não delegadas') === driver);
+
+    // Totais consolidados por produto (galpão separa tudo de uma vez)
+    const totals = new Map<string, number>();
+    for (const d of list) {
+      for (const it of d.items) {
+        const key = `${it.productName} (${it.unit})`;
+        totals.set(key, (totals.get(key) || 0) + (it.expectedQty || 0));
+      }
+    }
+
+    const rows = list
+      .map(
+        (d) => `
+        <tr>
+          <td>
+            <b>${d.customerName}</b><br/>
+            <small>${d.address} — ${d.neighborhood}, ${d.city}</small><br/>
+            <small>Turno: ${d.shift === 'manha' ? 'Manhã' : 'Tarde'} · Vasilhames: ${d.cratesDelivered}</small>
+          </td>
+          <td>
+            ${(d.items || []).map((it) => `${it.expectedQty} ${it.unit} — ${it.productName}`).join('<br/>')}
+          </td>
+        </tr>`
+      )
+      .join('');
+
+    const totalRows = Array.from(totals.entries())
+      .map(([k, v]) => `<li><b>${v}</b> — ${k}</li>`)
+      .join('');
+
+    const html = `
+      <html>
+        <head>
+          <title>Lista de Separação — ${driver}</title>
+          <style>
+            body { font-family: Arial, sans-serif; font-size: 12px; margin: 24px; }
+            h1 { font-size: 16px; margin: 0 0 2px; }
+            h2 { font-size: 13px; margin: 16px 0 6px; border-bottom: 1px solid #999; padding-bottom: 2px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+            th, td { border: 1px solid #bbb; padding: 6px 8px; text-align: left; vertical-align: top; }
+            th { background: #eee; }
+            small { color: #444; }
+            ul { margin: 4px 0; padding-left: 18px; }
+            .meta { color: #555; margin-bottom: 8px; }
+          </style>
+        </head>
+        <body>
+          <h1>Lista de Separação — ${driver}</h1>
+          <p class="meta">
+            Emitida em ${new Date().toLocaleString('pt-BR')} ·
+            ${list.length} entrega(s) · ${Array.from(totals.keys()).length} produto(s) diferente(s)
+          </p>
+
+          <h2>Totais para conferência no galpão</h2>
+          <ul>${totalRows || '<li>—</li>'}</ul>
+
+          <h2>Entregas na ordem</h2>
+          <table>
+            <thead>
+              <tr><th style="width:45%">Cliente / Endereço</th><th>Itens</th></tr>
+            </thead>
+            <tbody>${rows || '<tr><td colspan="2">Nenhuma entrega pendente.</td></tr>'}</tbody>
+          </table>
+
+          <p style="margin-top:18px">
+            Conferido por: ______________________________&nbsp;&nbsp;&nbsp;
+            Conferido por: ______________________________
+          </p>
+        </body>
+      </html>`;
+
+    const w = window.open('', '_blank', 'width=820,height=900');
+    if (!w) {
+      alert('Permita as janelas pop-up para gerar a lista de separação.');
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  };
 
   return (
     <div className="space-y-6 pb-12">
@@ -156,6 +247,38 @@ export const DeliveriesManagement: React.FC = () => {
           </select>
         </div>
       </div>
+
+      {/* Lista de Separação por entregador */}
+      {driversWithPending.length > 0 && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/60 p-4 shadow-2xs">
+          <p className="flex items-center gap-2 text-xs font-bold text-amber-900 uppercase tracking-wider mb-1">
+            <Printer className="h-4 w-4" />
+            Lista de Separação por Entregador
+          </p>
+          <p className="text-[11px] text-amber-700 mb-3">
+            Gera a lista para imprimir (ou salvar em PDF): totais consolidados por produto para o
+            galpão + cliente, endereço e itens de cada entrega na ordem.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {driversWithPending.map((drv) => {
+              const count = pendingByDriver.filter((d) => (d.driverName || 'Não delegadas') === drv).length;
+              return (
+                <button
+                  key={drv}
+                  onClick={() => handlePrintSeparation(drv)}
+                  className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-bold text-amber-900 hover:bg-amber-100 transition-colors"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  {drv}
+                  <span className="rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] font-black">
+                    {count}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Deliveries Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

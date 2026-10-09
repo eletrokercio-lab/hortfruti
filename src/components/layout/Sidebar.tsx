@@ -4,7 +4,6 @@ import {
   ShoppingBag,
   Truck,
   CalendarCheck,
-  PackageSearch,
   ShoppingCart,
   Users,
   Box,
@@ -234,26 +233,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile, s
                 <CalendarCheck className="h-4 w-4" />
                 <span>Planejamento & Colheita</span>
               </button>
-
-              <button
-                onClick={() => handleNav('driver-app')}
-                className={navItemClass('driver-app')}
-              >
-                <Smartphone className="h-4 w-4 text-amber-500" />
-                <span>App do Motorista (Mobile)</span>
-              </button>
             </div>
 
-            {/* Compras & Fornecedores */}
+            {/* Abastecimento */}
             <div className="space-y-1">
-              <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">Compras & Estoque</p>
-              <button
-                onClick={() => handleNav('planning')}
-                className={navItemClass('planning')}
-              >
-                <PackageSearch className="h-4 w-4" />
-                <span>Necessidades de Compra</span>
-              </button>
+              <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-gray-400">Abastecimento</p>
 
               <button
                 onClick={() => handleNav('suppliers')}

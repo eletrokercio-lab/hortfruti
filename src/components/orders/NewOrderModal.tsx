@@ -9,6 +9,7 @@ import {
   AlertCircle,
   Clock,
   Send,
+  History,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatUnit } from '../../utils/formatters';
@@ -28,6 +29,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const {
     customers,
     products,
+    orders,
     createOrder,
     getProductPriceForCustomer,
   } = useApp();
@@ -153,6 +155,23 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     if (products.length > 0) {
       setItems([...items, { productId: products[0].id, quantity: 10 }]);
     }
+  };
+
+  // Último pedido do cliente selecionado (para repetir itens)
+  const lastCustomerOrder = orders
+    .filter((o) => o.customerId === customerId && o.status !== 'cancelado')
+    .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+
+  const handleRepeatLastOrder = () => {
+    if (!lastCustomerOrder) return;
+    const mapped = lastCustomerOrder.items
+      .map((it) => ({
+        productId: products.find((p) => p.id === it.productId)?.id || '',
+        quantity: Math.max(1, Math.round(it.quantity)),
+      }))
+      .filter((it) => it.productId && products.some((p) => p.id === it.productId));
+    if (mapped.length === 0) return;
+    setItems(mapped);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -288,18 +307,31 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               <label className="block text-xs font-bold text-gray-700 mb-1">
                 Cliente *
               </label>
-              <select
-                value={customerId}
-                onChange={(e) => handleCustomerChange(e.target.value)}
-                required
-                className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-              >
-                {customers.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name} {c.tradeName ? `(${c.tradeName})` : ''}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2">
+                <select
+                  value={customerId}
+                  onChange={(e) => handleCustomerChange(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                >
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} {c.tradeName ? `(${c.tradeName})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {lastCustomerOrder && (
+                  <button
+                    type="button"
+                    onClick={handleRepeatLastOrder}
+                    className="flex shrink-0 items-center gap-1 rounded-xl border border-emerald-300 bg-emerald-50 px-2.5 py-2 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100"
+                    title={`Puxa os itens do pedido ${lastCustomerOrder.orderNumber} (${new Date(lastCustomerOrder.date + 'T12:00:00').toLocaleDateString('pt-BR')})`}
+                  >
+                    <History className="h-3.5 w-3.5" />
+                    Último pedido
+                  </button>
+                )}
+              </div>
             </div>
 
             <div>

@@ -9,9 +9,10 @@ import {
   Clock,
   Truck,
   ArrowUpDown,
+  PackageOpen,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
-import { Order } from '../../types';
+import { Order, OrderStatus } from '../../types';
 import { formatBRL, formatDate, getOrderStatusBadge } from '../../utils/formatters';
 import { OrderDetailModal } from './OrderDetailModal';
 
@@ -20,15 +21,37 @@ interface OrdersListProps {
 }
 
 export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
-  const { orders } = useApp();
+  const { orders, updateOrderStatus } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<'hoje' | 'amanha' | 'todos'>('hoje');
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [openDriverPick, setOpenDriverPick] = useState(false);
+
+  // Data de hoje/amanhã no formato YYYY-MM-DD (local)
+  const toISODate = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+  const todayStr = toISODate(new Date());
+  const tomorrowDate = new Date();
+  tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+  const tomorrowStr = toISODate(tomorrowDate);
+  const deliveryDay = (o: Order) => (o.deliveryDate || '').slice(0, 10);
+
+  // Filtro de data (base dos KPIs)
+  const baseOrders = orders.filter((o) => {
+    if (dateFilter === 'todos') return true;
+    const day = deliveryDay(o);
+    return dateFilter === 'hoje' ? day === todayStr : day === tomorrowStr;
+  });
 
   // Filtered orders
-  const filteredOrders = orders.filter((o) => {
+  const filteredOrders = baseOrders.filter((o) => {
     const matchesSearch =
       o.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
       o.customerName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -39,10 +62,37 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
 
   const totalValue = filteredOrders.reduce((acc, curr) => acc + curr.total, 0);
 
+  // Próximo passo operacional de cada status (botão rápido na linha)
+  const NEXT_STEP: Partial<Record<OrderStatus, { next: OrderStatus; label: string }>> = {
+    pendente: { next: 'em_separacao', label: 'Separar' },
+    em_separacao: { next: 'pronto', label: 'Pronto' },
+    pronto: { next: 'em_rota', label: 'Em Rota' },
+    em_rota: { next: 'entregue', label: 'Entregar' },
+  };
+
+  const handleQuickStep = (ord: Order) => {
+    const step = NEXT_STEP[ord.status];
+    if (!step) return;
+    updateOrderStatus(ord.id, step.next);
+    // Ao colocar em rota, abre o modal direto no seletor de entregador
+    if (step.next === 'em_rota') {
+      setSelectedOrder(ord);
+      setOpenDriverPick(true);
+      setIsDetailOpen(true);
+    }
+  };
+
   const handleOpenDetail = (order: Order) => {
     setSelectedOrder(order);
+    setOpenDriverPick(false);
     setIsDetailOpen(true);
   };
+
+  const dateTabs: { key: 'hoje' | 'amanha' | 'todos'; label: string; count: number }[] = [
+    { key: 'hoje', label: 'Hoje', count: orders.filter((o) => deliveryDay(o) === todayStr).length },
+    { key: 'amanha', label: 'Amanhã', count: orders.filter((o) => deliveryDay(o) === tomorrowStr).length },
+    { key: 'todos', label: 'Todos', count: orders.length },
+  ];
 
   return (
     <div className="space-y-6 pb-12">
@@ -78,7 +128,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
         <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-2xs">
           <span className="text-[10px] font-bold uppercase text-gray-400">Pendentes</span>
           <p className="text-lg font-black text-amber-700">
-            {orders.filter((o) => o.status === 'pendente').length}
+            {baseOrders.filter((o) => o.status === 'pendente').length}
           </p>
           <span className="text-[11px] text-gray-500">Aguardando separação</span>
         </div>
@@ -86,7 +136,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
         <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-2xs">
           <span className="text-[10px] font-bold uppercase text-gray-400">Em Separação / Rota</span>
           <p className="text-lg font-black text-blue-700">
-            {orders.filter((o) => o.status === 'em_separacao' || o.status === 'em_rota').length}
+            {baseOrders.filter((o) => o.status === 'em_separacao' || o.status === 'em_rota').length}
           </p>
           <span className="text-[11px] text-gray-500">Em andamento na expedição</span>
         </div>
@@ -94,10 +144,34 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
         <div className="rounded-xl border border-gray-200 bg-white p-3.5 shadow-2xs">
           <span className="text-[10px] font-bold uppercase text-gray-400">Entregues</span>
           <p className="text-lg font-black text-emerald-700">
-            {orders.filter((o) => o.status === 'entregue').length}
+            {baseOrders.filter((o) => o.status === 'entregue').length}
           </p>
           <span className="text-[11px] text-gray-500">Concluídos com sucesso</span>
         </div>
+      </div>
+
+      {/* Date Tabs: fila do dia */}
+      <div className="flex items-center gap-1 rounded-xl border border-gray-200 bg-white p-1 w-fit shadow-2xs">
+        {dateTabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setDateFilter(tab.key)}
+            className={`flex items-center gap-1.5 rounded-lg px-3.5 py-1.5 text-xs font-bold transition-all ${
+              dateFilter === tab.key
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'text-gray-600 hover:bg-gray-100'
+            }`}
+          >
+            {tab.label}
+            <span
+              className={`rounded-full px-1.5 py-0.5 text-[10px] font-black ${
+                dateFilter === tab.key ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              {tab.count}
+            </span>
+          </button>
+        ))}
       </div>
 
       {/* Search and Filters Bar */}
@@ -180,16 +254,41 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleOpenDetail(ord);
-                          }}
-                          className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-                          title="Ver Detalhes"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1.5">
+                          {NEXT_STEP[ord.status] && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleQuickStep(ord);
+                              }}
+                              className="flex items-center gap-1 rounded-lg bg-emerald-50 border border-emerald-200 px-2 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
+                              title={`Avançar para: ${NEXT_STEP[ord.status]!.label}`}
+                            >
+                              {ord.status === 'em_rota' ? (
+                                <Truck className="h-3.5 w-3.5" />
+                              ) : (
+                                <PackageOpen className="h-3.5 w-3.5" />
+                              )}
+                              {NEXT_STEP[ord.status]!.label}
+                            </button>
+                          )}
+                          {ord.status === 'entregue' && (
+                            <span className="flex items-center gap-1 text-[11px] font-bold text-emerald-600">
+                              <CheckCircle2 className="h-3.5 w-3.5" />
+                              Concluído
+                            </span>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenDetail(ord);
+                            }}
+                            className="rounded-lg p-1.5 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+                            title="Ver Detalhes"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -205,6 +304,7 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
         order={selectedOrder ? orders.find((o) => o.id === selectedOrder.id) || selectedOrder : null}
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
+        initialDriverPick={openDriverPick}
       />
     </div>
   );

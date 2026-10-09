@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { playNotificationSound, isSelfNotification, markNotificationSeen } from '../utils/notify';
+import { formatBRL } from '../utils/formatters';
 import {
   UserRole,
   Customer,
@@ -737,6 +738,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })();
       }
     }
+
+    // Baixa do recebível ao finalizar a entrega:
+    // PIX = baixa automática; à vista = operador confirma se recebeu agora
+    if (status === 'entregue' && order) {
+      const rec = receivables.find(
+        (r) =>
+          r.status !== 'pago' &&
+          (r.orderId === orderId || (!!r.orderNumber && r.orderNumber === order.orderNumber))
+      );
+      if (rec) {
+        if (
+          order.paymentMethod === 'pix' ||
+          window.confirm(
+            `Pedido ${order.orderNumber} entregue.\n\nRecebeu ${formatBRL(rec.amount)} do cliente ${order.customerName} agora?\n\nOK = recebeu na entrega (baixa no financeiro)\nCancelar = ainda não recebeu`
+          )
+        ) {
+          receivePayment(rec.id, rec.amount, order.paymentMethod);
+        }
+      }
+    }
   };
 
   const updateDeliveryStatus = (deliveryId: string, status: DeliveryStatus) => {
@@ -904,6 +925,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             : o
         )
       );
+    }
+
+    // 2b. PIX: baixa automática do recebível quando o entregador finaliza a entrega
+    // (à vista fica em aberto para o operador confirmar no financeiro)
+    if (!data.issueReport && delivery.orderId) {
+      const linkedOrder = orders.find((o) => o.id === delivery.orderId);
+      const rec = receivables.find(
+        (r) =>
+          r.status !== 'pago' &&
+          (r.orderId === delivery.orderId ||
+            (!!r.orderNumber && r.orderNumber === delivery.orderNumber))
+      );
+      if (linkedOrder && rec && linkedOrder.paymentMethod === 'pix') {
+        receivePayment(rec.id, rec.amount, 'pix');
+        const idOp = genNotificationId();
+        markNotificationSeen(idOp);
+        setNotifications((prev) => [
+          {
+            id: idOp,
+            type: 'financial',
+            title: 'Pagamento PIX recebido',
+            message: `Entrega do pedido ${delivery.orderNumber} (${delivery.customerName}) finalizada. PIX de ${formatBRL(rec.amount)} baixado automaticamente.`,
+            date: 'Agora mesmo',
+            read: false,
+            actionTab: 'finance',
+          },
+          ...prev,
+        ]);
+      }
     }
 
     // 3. Register Crate Movement (Vasilhames)

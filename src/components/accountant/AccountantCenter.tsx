@@ -32,80 +32,175 @@ export const AccountantCenter: React.FC = () => {
     setAssistantInitialPrompt,
   } = useApp();
 
-  const [selectedMonth, setSelectedMonth] = useState('2026-10');
+  // Meses disponíveis derivados dos dados reais (pedidos, compras, despesas, caixa)
+  const [selectedMonth, setSelectedMonth] = useState('');
+  const monthOptions = React.useMemo(() => {
+    const months = new Set<string>();
+    [
+      ...orders.map((o) => o.date),
+      ...purchases.map((p) => p.date),
+      ...expenses.map((e) => e.date),
+      ...cashMovements.map((m) => m.date),
+    ].forEach((d) => {
+      if (d) months.add(String(d).slice(0, 7));
+    });
+    months.add(new Date().toISOString().slice(0, 7)); // mês corrente sempre presente
+    return Array.from(months).sort().reverse();
+  }, [orders, purchases, expenses, cashMovements]);
+
+  const month = selectedMonth || monthOptions[0] || new Date().toISOString().slice(0, 7);
+
+  const formatMonthLabel = (m: string) => {
+    const [y, mo] = m.split('-');
+    const names = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    return `${names[parseInt(mo, 10) - 1] || mo} / ${y}`;
+  };
+
   const [closureNotes, setClosureNotes] = useState('');
 
   // Find closure record for selected month
-  const closure = monthlyClosures.find((c) => c.month === selectedMonth);
+  const closure = monthlyClosures.find((c) => c.month === month);
   const isClosed = closure?.status === 'fechado';
 
   // Calculate live numbers for selected month
-  const monthOrders = orders.filter((o) => o.date.startsWith(selectedMonth));
+  const monthOrders = orders.filter((o) => o.date.startsWith(month));
   const grossRevenue = monthOrders.reduce((acc, curr) => acc + curr.total, 0);
 
   const monthCashReceived = cashMovements
-    .filter((m) => m.date.startsWith(selectedMonth) && m.type === 'entrada')
+    .filter((m) => m.date.startsWith(month) && m.type === 'entrada')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const monthPurchases = purchases
-    .filter((p) => p.date.startsWith(selectedMonth))
+    .filter((p) => p.date.startsWith(month))
     .reduce((acc, curr) => acc + curr.total, 0);
 
   const monthExpenses = expenses
-    .filter((e) => e.date.startsWith(selectedMonth))
+    .filter((e) => e.date.startsWith(month))
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const openRec = receivables
-    .filter((r) => r.dueDate.startsWith(selectedMonth) && r.status !== 'pago')
+    .filter((r) => r.dueDate.startsWith(month) && r.status !== 'pago')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const openPay = payables
-    .filter((p) => p.dueDate.startsWith(selectedMonth) && p.status !== 'pago')
+    .filter((p) => p.dueDate.startsWith(month) && p.status !== 'pago')
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const netMonthResult = monthCashReceived - (monthPurchases + monthExpenses);
 
   const handleToggleClose = () => {
     if (isClosed) {
-      if (confirm(`Tem certeza que deseja reabrir o período ${selectedMonth}?`)) {
-        reopenMonthPeriod(selectedMonth);
+      if (confirm(`Tem certeza que deseja reabrir o período ${month}?`)) {
+        reopenMonthPeriod(month);
       }
     } else {
-      closeMonthPeriod(selectedMonth, closureNotes);
+      closeMonthPeriod(month, closureNotes);
     }
   };
 
   const handleAskAIAccountant = () => {
     setAssistantInitialPrompt(
-      `Prepare um relatório analítico para o contador do período ${selectedMonth}, consolidando faturamento, recebimentos, compras, despesas e resultado contábil.`
+      `Prepare um relatório analítico para o contador do período ${month}, consolidando faturamento, recebimentos, compras, despesas e resultado contábil.`
     );
     setIsAssistantOpen(true);
   };
 
-  // Export functions (CSV download)
-  const handleExportCSV = () => {
+  // Export genérico (CSV ; separado, com escape)
+  const downloadCsv = (filename: string, rows: (string | number)[][]) => {
+    const esc = (v: string | number) => {
+      const s = String(v ?? '');
+      return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
     const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [
-        ['Indicador Contabil', 'Valor (R$)'],
-        ['Faturamento Bruto de Vendas', grossRevenue.toFixed(2)],
-        ['Recebimentos Realizados no Mes', monthCashReceived.toFixed(2)],
-        ['Compras de Mercadorias (Hortifruti)', monthPurchases.toFixed(2)],
-        ['Despesas Operacionais Pagas', monthExpenses.toFixed(2)],
-        ['Contas a Receber em Aberto (Final do Mes)', openRec.toFixed(2)],
-        ['Contas a Pagar em Aberto (Final do Mes)', openPay.toFixed(2)],
-        ['Resultado Financeiro Liquido', netMonthResult.toFixed(2)],
-      ]
-        .map((e) => e.join(';'))
-        .join('\n');
-
+      'data:text/csv;charset=utf-8,' + rows.map((r) => r.map(esc).join(';')).join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `fechamento_contabil_${selectedMonth}.csv`);
+    link.setAttribute('download', filename);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  // 1. Vendas do mês: pedido a pedido
+  const handleExportSalesCsv = () => {
+    downloadCsv(`vendas_${month}.csv`, [
+      ['Pedido', 'Cliente', 'Emissao', 'Entrega', 'Status', 'Pagamento', 'Condicao', 'Total (R$)'],
+      ...monthOrders.map((o) => [
+        o.orderNumber,
+        o.customerName,
+        o.date,
+        o.deliveryDate,
+        o.status,
+        o.paymentMethod,
+        o.paymentTerm,
+        o.total.toFixed(2),
+      ]),
+    ]);
+  };
+
+  // 2. Compras do mês
+  const handleExportPurchasesCsv = () => {
+    downloadCsv(`compras_${month}.csv`, [
+      ['Compra', 'Fornecedor', 'Data', 'Vencimento', 'Status', 'Total (R$)'],
+      ...purchases
+        .filter((p) => p.date.startsWith(month))
+        .map((p) => [
+          p.purchaseNumber,
+          p.supplierName,
+          p.date,
+          p.dueDate,
+          p.status,
+          p.total.toFixed(2),
+        ]),
+    ]);
+  };
+
+  // 3. Despesas do mês
+  const handleExportExpensesCsv = () => {
+    downloadCsv(`despesas_${month}.csv`, [
+      ['Data', 'Categoria', 'Descricao', 'Pagamento', 'Valor (R$)'],
+      ...expenses
+        .filter((e) => e.date.startsWith(month))
+        .map((e) => [
+          e.date,
+          e.category,
+          e.description,
+          e.paymentMethod,
+          e.amount.toFixed(2),
+        ]),
+    ]);
+  };
+
+  // 4. Extrato de caixa do mês
+  const handleExportCashCsv = () => {
+    downloadCsv(`caixa_${month}.csv`, [
+      ['Data', 'Tipo', 'Categoria', 'Descricao', 'Valor (R$)'],
+      ...cashMovements
+        .filter((m) => m.date.startsWith(month))
+        .map((m) => [
+          m.date,
+          m.type,
+          m.category,
+          m.description,
+          m.amount.toFixed(2),
+        ]),
+    ]);
+  };
+
+  // Resumo geral (mantido para o botão principal)
+  const handleExportSummaryCsv = () => {
+    downloadCsv(`fechamento_contabil_${month}.csv`, [
+      ['Indicador Contabil', 'Valor (R$)'],
+      ['Mes', month],
+      ['Faturamento Bruto de Vendas', grossRevenue.toFixed(2)],
+      ['Recebimentos Realizados no Mes', monthCashReceived.toFixed(2)],
+      ['Compras de Mercadorias (Hortifruti)', monthPurchases.toFixed(2)],
+      ['Despesas Operacionais Pagas', monthExpenses.toFixed(2)],
+      ['Contas a Receber em Aberto (Final do Mes)', openRec.toFixed(2)],
+      ['Contas a Pagar em Aberto (Final do Mes)', openPay.toFixed(2)],
+      ['Resultado Financeiro Liquido', netMonthResult.toFixed(2)],
+    ]);
   };
 
   const handlePrint = () => {
@@ -136,11 +231,11 @@ export const AccountantCenter: React.FC = () => {
           </button>
 
           <button
-            onClick={handleExportCSV}
+            onClick={handleExportSummaryCsv}
             className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 px-3.5 py-2 text-xs font-bold text-gray-700 shadow-2xs"
           >
             <Download className="h-4 w-4 text-gray-600" />
-            <span>Exportar CSV</span>
+            <span>Exportar Resumo (CSV)</span>
           </button>
 
           <button
@@ -162,13 +257,15 @@ export const AccountantCenter: React.FC = () => {
               Mês de Referência
             </label>
             <select
-              value={selectedMonth}
+              value={month}
               onChange={(e) => setSelectedMonth(e.target.value)}
               className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-900 focus:outline-hidden"
             >
-              <option value="2026-10">Outubro / 2026 (Mês Atual)</option>
-              <option value="2026-09">Setembro / 2026</option>
-              <option value="2026-08">Agosto / 2026</option>
+              {monthOptions.map((m) => (
+                <option key={m} value={m}>
+                  {formatMonthLabel(m)}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -218,7 +315,7 @@ export const AccountantCenter: React.FC = () => {
       <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-2xs space-y-6">
         <div className="border-b border-gray-100 pb-3">
           <h2 className="text-base font-black text-gray-900">
-            Demonstrativo de Fechamento — {selectedMonth}
+            Demonstrativo de Fechamento — {formatMonthLabel(month)}
           </h2>
           <p className="text-xs text-gray-500">
             Valores apurados automaticamente das operações de vendas, compras e contas
@@ -289,25 +386,25 @@ export const AccountantCenter: React.FC = () => {
 
           <div className="flex flex-wrap gap-2 pt-1">
             <button
-              onClick={handleExportCSV}
+              onClick={handleExportSalesCsv}
               className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
             >
               <Download className="h-3.5 w-3.5" /> 1. Relatório de Vendas (CSV)
             </button>
             <button
-              onClick={handleExportCSV}
+              onClick={handleExportPurchasesCsv}
               className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
             >
               <Download className="h-3.5 w-3.5" /> 2. Relatório de Compras (CSV)
             </button>
             <button
-              onClick={handleExportCSV}
+              onClick={handleExportExpensesCsv}
               className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
             >
               <Download className="h-3.5 w-3.5" /> 3. Relatório de Despesas (CSV)
             </button>
             <button
-              onClick={handleExportCSV}
+              onClick={handleExportCashCsv}
               className="rounded-lg bg-white border border-purple-200 px-3 py-1.5 text-xs font-semibold text-purple-900 hover:bg-purple-100 flex items-center gap-1.5"
             >
               <Download className="h-3.5 w-3.5" /> 4. Extrato Bancário / Caixa (CSV)
