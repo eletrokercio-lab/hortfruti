@@ -28,7 +28,7 @@ interface DriverAppViewProps {
 
 export const DriverAppView: React.FC<DriverAppViewProps> = ({ onBack }) => {
   const { deliveries, updateDeliveryStatus, confirmDelivery, customers } = useApp();
-  const { profile, supportCustomer } = useAuth();
+  const { profile, supportCustomer, signOut } = useAuth();
 
   const [activeDelivery, setActiveDelivery] = useState<Delivery | null>(null);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
@@ -118,11 +118,21 @@ export const DriverAppView: React.FC<DriverAppViewProps> = ({ onBack }) => {
       <div className="rounded-2xl bg-amber-600 p-4 text-white shadow-md">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            {onBack && (
+            {onBack ? (
               <button
                 onClick={onBack}
                 className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
                 title="Voltar para Entregas"
+              >
+                <ArrowLeft className="h-4.5 w-4.5" />
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  if (window.confirm('Sair da conta e voltar para a tela de login?')) signOut();
+                }}
+                className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+                title="Sair da conta"
               >
                 <ArrowLeft className="h-4.5 w-4.5" />
               </button>

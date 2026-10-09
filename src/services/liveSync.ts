@@ -142,8 +142,10 @@ export const liveSync = {
         routeOrder: d.route_order ?? undefined,
       }));
 
-      // Produtos
-      const products: Product[] = (productsRes.data || []).map((p: any) => ({
+      // Produtos (inativos ficam fora do catálogo, mas preservam o histórico de pedidos)
+      const products: Product[] = (productsRes.data || [])
+        .filter((p: any) => p.status !== 'inactive')
+        .map((p: any) => ({
         id: p.id,
         name: p.name,
         category: p.category as ProductCategory,
@@ -156,7 +158,6 @@ export const liveSync = {
         imageUrl: p.image_url || undefined,
         status: p.status,
       }));
-
       // Clientes
       const customers: Customer[] = (customersRes.data || []).map((c: any) => ({
         id: c.id,
