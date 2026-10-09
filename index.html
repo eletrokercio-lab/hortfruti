@@ -7,8 +7,8 @@
     <meta name="description" content="Sistema completo e automatizado para distribuidoras de hortifruti com gestão de clientes, preços individuais, pedidos, necessidades de colheita e compras, entregas, controle de vasilhames, financeiro, central do contador e assistente inteligente com IA." />
     <meta name="theme-color" content="#059669" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" href="/icon-512.png" />
-    <link rel="apple-touch-icon" href="/icon-512.png" />
+    <link rel="icon" type="image/png" href="/logo.png" />
+    <link rel="apple-touch-icon" href="/logo.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -19,7 +19,17 @@
     <meta name="twitter:card" content="summary_large_image" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Splash de carregamento (substituído quando o app monta) -->
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#064e3b,#065f46,#111827);">
+        <div style="text-align:center;">
+          <img src="/logo.png" alt="G. Less Hortifruti" style="height:96px;width:auto;margin:0 auto;display:block;filter:drop-shadow(0 10px 15px rgba(0,0,0,.4));" />
+          <p style="margin-top:12px;color:#a7f3d0;font-size:14px;font-weight:700;">Carregando HortiGestão...</p>
+          <div style="margin:14px auto 0;width:28px;height:28px;border:3px solid rgba(167,243,208,.25);border-top-color:#34d399;border-radius:50%;animation:hgspin .8s linear infinite;"></div>
+        </div>
+      </div>
+      <style>@keyframes hgspin{to{transform:rotate(360deg)}}</style>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

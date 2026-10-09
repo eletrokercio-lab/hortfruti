@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { BuyerPortal } from './components/buyer/BuyerPortal';
 import { ShieldAlert, LogOut } from 'lucide-react';
+import logo from './assets/logo.png';
 
 // Main views
 import { Header } from './components/layout/Header';
@@ -204,12 +205,11 @@ const AppRoot: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-emerald-900">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-900 via-emerald-800 to-gray-900">
         <div className="text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500 text-3xl shadow-lg">
-            🥬
-          </div>
+          <img src={logo} alt="G. Less Hortifruti" className="mx-auto h-24 w-auto drop-shadow-lg" />
           <p className="mt-3 text-sm font-bold text-emerald-100">Carregando HortiGestão...</p>
+          <div className="mx-auto mt-3.5 h-7 w-7 animate-spin rounded-full border-[3px] border-emerald-300/25 border-t-emerald-400" />
         </div>
       </div>
     );
