@@ -10,6 +10,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { BuyerPortal } from './components/buyer/BuyerPortal';
 import { ShieldAlert, LogOut } from 'lucide-react';
 import logo from './assets/logo.png';
+import { InstallPrompt } from './components/pwa/InstallPrompt';
 
 // Main views
 import { Header } from './components/layout/Header';
@@ -317,6 +318,7 @@ export default function App() {
   return (
     <AuthProvider>
       <AppRoot />
+      <InstallPrompt />
     </AuthProvider>
   );
 }

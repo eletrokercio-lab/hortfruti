@@ -1,6 +1,6 @@
 // Service Worker mínimo do HortiGestão (suporte a PWA / instalação)
-const CACHE = 'hortigestao-v2';
-const ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/icon-512.png', '/logo.png'];
+const CACHE = 'hortigestao-v3';
+const ASSETS = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/logo.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
