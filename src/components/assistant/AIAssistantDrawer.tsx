@@ -44,6 +44,7 @@ export const AIAssistantDrawer: React.FC = () => {
     payables,
     products,
     customers,
+    suppliers,
     calculateProductNeeds,
     harvestPlans,
     logAIAudit,
@@ -63,6 +64,8 @@ export const AIAssistantDrawer: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<'chat' | 'history'>('chat');
   const [drivers, setDrivers] = useState<{ id: string; name: string }[]>([]);
+  // Fornecedor escolhido pelo usuário para cada ação de colheita (por mensagem)
+  const [harvestSupplierChoice, setHarvestSupplierChoice] = useState<Record<string, string>>({});
 
   // Entregadores cadastrados (para a IA poder delegar entregas)
   useEffect(() => {
@@ -163,6 +166,7 @@ export const AIAssistantDrawer: React.FC = () => {
         unit: p.unit,
       })),
       harvestNeeds: harvestNeeds.map((h) => ({
+        productId: h.productId,
         productName: h.productName,
         neededQty: h.neededQty,
         unit: h.unit,
@@ -196,6 +200,12 @@ export const AIAssistantDrawer: React.FC = () => {
         .slice(0, 40)
         .map((r) => ({ receivableId: r.id, customer: r.customerName, amount: r.amount, due: r.dueDate, status: r.status })),
       productsList: products.map((p) => ({ productId: p.id, name: p.name, unit: p.unit })),
+      suppliersList: suppliers.map((s) => ({
+        supplierId: s.id,
+        name: s.name,
+        phone: s.phone || null,
+        whatsapp: s.whatsapp || null,
+      })),
     };
 
     try {
@@ -243,6 +253,19 @@ export const AIAssistantDrawer: React.FC = () => {
   };
 
   const handleConfirmAction = (msgId: string, action: any) => {
+    // Colheita: injeta o fornecedor escolhido no seletor da mensagem
+    if (action?.type === 'EXECUTE_CREATE_HARVEST') {
+      const choiceId = harvestSupplierChoice[msgId] || '';
+      const supplier = suppliers.find((s) => s.id === choiceId);
+      action = {
+        ...action,
+        data: {
+          ...(action.data || {}),
+          supplierId: supplier?.id,
+          supplierName: supplier?.name,
+        },
+      };
+    }
     executeAISuggestion(action);
     const isExecute = typeof action?.type === 'string' && action.type.startsWith('EXECUTE_');
     setMessages((prev) => [
@@ -368,6 +391,37 @@ export const AIAssistantDrawer: React.FC = () => {
                       <p className="text-[11px] text-emerald-800 mb-2">
                         {msg.suggestedAction.label}
                       </p>
+
+                      {/* Colheita: escolha do fornecedor/produtor antes de executar */}
+                      {msg.suggestedAction.type === 'EXECUTE_CREATE_HARVEST' && !msg.confirmed && (
+                        <div className="mb-2">
+                          <label className="block text-[10px] font-bold text-emerald-900 uppercase mb-1">
+                            Fornecedor / Produtor:
+                          </label>
+                          <select
+                            value={harvestSupplierChoice[msg.id] || ''}
+                            onChange={(e) =>
+                              setHarvestSupplierChoice((prev) => ({
+                                ...prev,
+                                [msg.id]: e.target.value,
+                              }))
+                            }
+                            className="w-full rounded-lg border border-emerald-300 bg-white px-2 py-1.5 text-[11px] text-gray-900"
+                          >
+                            <option value="">— Sem fornecedor vinculado —</option>
+                            {suppliers.map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {s.name}{s.whatsapp || s.phone ? ` · ${s.whatsapp || s.phone}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                          {suppliers.length === 0 && (
+                            <p className="mt-1 text-[10px] text-emerald-800/70">
+                              Nenhum fornecedor cadastrado — a ordem será criada sem vínculo.
+                            </p>
+                          )}
+                        </div>
+                      )}
 
                       {!msg.confirmed ? (
                         <div className="flex gap-2">

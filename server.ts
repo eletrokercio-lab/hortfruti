@@ -624,7 +624,8 @@ Se o usuário PEDIR PARA FAZER algo (ex.: "envie o pedido PED-123 para entrega",
 1) Enviar/delegar entrega para um entregador:
 {"type":"EXECUTE_ASSIGN_DELIVERY","label":"Delegar entrega <nº pedido> para <nome>","tab":"deliveries","data":{"deliveryId":"id de pendingDeliveries","driverProfileId":"id de drivers","driverName":"nome do entregador"}}
 2) Criar pedido de colheita:
-{"type":"EXECUTE_CREATE_HARVEST","label":"Criar colheita de <produto>","tab":"planning","data":{"productId":"id de productsList","neededQty":quantidade_necessaria,"harvestQty":quantidade_a_colher,"date":"YYYY-MM-DD (use todayDate do contexto como hoje, ou data citada pelo usuário)","responsible":"nome ou 'Equipe de colheita'","notes":"opcional"}}
+{"type":"EXECUTE_CREATE_HARVEST","label":"Criar colheita de <produto>","tab":"planning","data":{"productId":"id de productsList","neededQty":quantidade_necessaria,"harvestQty":quantidade_a_colher,"date":"YYYY-MM-DD (use todayDate do contexto como hoje, ou data citada pelo usuário)","responsible":"nome ou 'Equipe de colheita'","notes":"opcional","supplierId":"id de suppliersList ou null"}}
+REGRA DO FORNECEDOR NA COLHEITA: se o usuário citar o nome do fornecedor/produtor, use o supplierId correspondente de suppliersList. Se houver MAIS DE UM fornecedor em suppliersList e o usuário NÃO tiver dito qual, PERGUNTE no "answer" (ex.: "Para qual fornecedor envio esta colheita? Tenho cadastrado: X e Y.") e mande action null. Só envie supplierId null se suppliersList estiver vazio ou o usuário disser que é colheita própria/sem fornecedor.
 3) Mudar status de um pedido:
 {"type":"EXECUTE_ORDER_STATUS","label":"Marcar pedido <nº> como <status>","tab":"orders","data":{"orderId":"id de ordersList","status":"pendente|em_separacao|pronto|em_rota|entregue|cancelado"}}
 4) Registrar recebimento de pagamento:

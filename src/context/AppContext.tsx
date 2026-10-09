@@ -1473,13 +1473,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       case 'EXECUTE_CREATE_HARVEST': {
         const product = products.find((p) => p.id === data.productId);
         if (product && Number(data.harvestQty) > 0) {
+          const supplier = suppliers.find((s) => s.id === data.supplierId);
           createHarvestPlan(
             product.id,
             Number(data.neededQty) || Number(data.harvestQty),
             Number(data.harvestQty),
             data.date || today,
             data.responsible || 'Assistente IA',
-            data.notes
+            data.notes,
+            supplier ? { id: supplier.id, name: supplier.name } : undefined
           );
         }
         setCurrentTab('planning');
