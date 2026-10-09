@@ -434,6 +434,9 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const cartCount = cartItems.reduce((acc, c) => acc + c.qty, 0);
 
   const addToCart = (productId: string, delta: number) => {
+    // Regra: produto sem preço não pode ser adicionado ao carrinho
+    const prod = products.find((p) => p.id === productId);
+    if (prod && getPrice(prod).price <= 0 && delta > 0) return;
     setCart((prev) => {
       const next = { ...prev };
       const q = (next[productId] || 0) + delta;
@@ -793,8 +796,19 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                 {visibleProducts.map((p) => {
                   const priceInfo = getPrice(p);
                   const qty = cart[p.id] || 0;
+                  // Regra: sem preço = card apagado, não selecionável
+                  const noPrice = priceInfo.price <= 0;
                   return (
-                    <div key={p.id} className={`rounded-xl border bg-white p-3 shadow-xs transition-all ${qty > 0 ? 'border-emerald-400 ring-2 ring-emerald-100' : 'border-gray-200'}`}>
+                    <div
+                      key={p.id}
+                      className={`rounded-xl border bg-white p-3 shadow-xs transition-all ${
+                        noPrice
+                          ? 'pointer-events-none border-gray-200 opacity-45 grayscale'
+                          : qty > 0
+                          ? 'border-emerald-400 ring-2 ring-emerald-100'
+                          : 'border-gray-200'
+                      }`}
+                    >
                       {(p.imageUrl || getCuratedImage(p.name)) ? (
                         <img
                           src={p.imageUrl || getCuratedImage(p.name) || ''}
@@ -811,21 +825,36 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                         <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-500">
                           {categoryLabels[p.category] || p.category}
                         </span>
-                        {priceInfo.isPromo && (
+                        {priceInfo.isPromo && !noPrice && (
                           <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-black text-rose-600">PROMO</span>
                         )}
                       </div>
                       <h3 className="mt-1.5 text-sm font-bold leading-tight text-gray-900">{p.name}</h3>
                       <p className="text-[11px] text-gray-400">{p.origin}</p>
                       <div className="mt-2">
-                        {priceInfo.isPromo && (
-                          <span className="mr-1.5 text-[11px] text-gray-400 line-through">{formatBRL(priceInfo.original)}</span>
+                        {noPrice ? (
+                          <span className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-500">
+                            Sem preço — consulte o vendedor
+                          </span>
+                        ) : (
+                          <>
+                            {priceInfo.isPromo && (
+                              <span className="mr-1.5 text-[11px] text-gray-400 line-through">{formatBRL(priceInfo.original)}</span>
+                            )}
+                            <span className="text-base font-black text-emerald-700">{formatBRL(priceInfo.price)}</span>
+                            <span className="text-[11px] text-gray-500"> /{p.unit}</span>
+                          </>
                         )}
-                        <span className="text-base font-black text-emerald-700">{formatBRL(priceInfo.price)}</span>
-                        <span className="text-[11px] text-gray-500"> /{p.unit}</span>
                       </div>
 
-                      {qty === 0 ? (
+                      {noPrice ? (
+                        <button
+                          disabled
+                          className="mt-2 flex w-full cursor-not-allowed items-center justify-center gap-1 rounded-lg bg-gray-200 py-1.5 text-xs font-bold text-gray-500"
+                        >
+                          Indisponível
+                        </button>
+                      ) : qty === 0 ? (
                         <button
                           onClick={() => addToCart(p.id, 1)}
                           className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 active:scale-[0.98]"
