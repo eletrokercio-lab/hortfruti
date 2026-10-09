@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PriceInput } from '../ui/PriceInput';
 import {
   PackageSearch,
   CalendarCheck,
@@ -587,13 +588,12 @@ export const PlanningView: React.FC = () => {
                       <div key={idx} className="flex items-center justify-between p-2.5 text-xs gap-3">
                         <div className="flex-1 font-bold text-gray-800">{prod?.name}</div>
                         <div className="flex items-center gap-2">
-                          <input
-                            type="number"
+                          <PriceInput
                             min="1"
                             value={it.quantity}
-                            onChange={(e) => {
+                            onValueChange={(v) => {
                               const copy = [...purchaseItems];
-                              copy[idx].quantity = parseFloat(e.target.value) || 1;
+                              copy[idx].quantity = v || 1;
                               setPurchaseItems(copy);
                             }}
                             className="w-16 rounded-md border border-gray-300 px-2 py-1 text-right text-xs font-bold"
@@ -602,13 +602,11 @@ export const PlanningView: React.FC = () => {
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-gray-400 text-[10px]">Custo R$:</span>
-                          <input
-                            type="number"
-                            step="0.1"
+                          <PriceInput
                             value={it.unitCost}
-                            onChange={(e) => {
+                            onValueChange={(v) => {
                               const copy = [...purchaseItems];
-                              copy[idx].unitCost = parseFloat(e.target.value) || 0;
+                              copy[idx].unitCost = v;
                               setPurchaseItems(copy);
                             }}
                             className="w-20 rounded-md border border-gray-300 px-2 py-1 text-right text-xs font-bold"
@@ -708,19 +706,17 @@ export const PlanningView: React.FC = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Qtd Necessária</label>
-                  <input
-                    type="number"
+                  <PriceInput
                     value={harvestNeededQty}
-                    onChange={(e) => setHarvestNeededQty(parseFloat(e.target.value) || 0)}
+                    onValueChange={setHarvestNeededQty}
                     className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900 font-bold"
                   />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Qtd a Colher</label>
-                  <input
-                    type="number"
+                  <PriceInput
                     value={harvestQty}
-                    onChange={(e) => setHarvestQty(parseFloat(e.target.value) || 0)}
+                    onValueChange={setHarvestQty}
                     className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900 font-bold text-emerald-800"
                   />
                 </div>

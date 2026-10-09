@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PriceInput } from '../ui/PriceInput';
 import {
   ArrowLeft,
   Users,
@@ -712,17 +713,13 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                 <label className="block text-xs font-bold text-gray-700 mb-1">
                   Preço Especial para este Cliente (R$)
                 </label>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  value={customPriceVal ? String(customPriceVal).replace('.', ',') : ''}
-                  onChange={(e) => {
-                    const raw = e.target.value.replace(',', '.').replace(/[^0-9.]/g, '');
-                    setCustomPriceVal(parseFloat(raw) || 0);
-                  }}
+                <PriceInput
+                  value={customPriceVal}
+                  onValueChange={setCustomPriceVal}
                   placeholder="Ex: 5,50"
                   className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs font-bold text-gray-900"
                 />
+                <p className="mt-1 text-[10px] text-gray-400">Aceita vírgula ou ponto: 5,50 ou 5.50</p>
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
@@ -770,11 +767,10 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Preço Promocional (R$)</label>
-                <input
-                  type="number"
-                  step="0.1"
+                <PriceInput
                   value={promoPrice}
-                  onChange={(e) => setPromoPrice(parseFloat(e.target.value) || 0)}
+                  onValueChange={setPromoPrice}
+                  placeholder="Ex: 5,50"
                   className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs font-bold text-gray-900"
                 />
               </div>

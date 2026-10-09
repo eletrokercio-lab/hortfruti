@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PriceInput } from '../ui/PriceInput';
 import {
   Users,
   Plus,
@@ -390,10 +391,10 @@ export const CustomersView: React.FC<CustomersViewProps> = ({
 
                 <div>
                   <label className="block text-xs font-bold text-gray-700 mb-1">Limite de Crédito (R$)</label>
-                  <input
-                    type="number"
+                  <PriceInput
                     value={creditLimit}
-                    onChange={(e) => setCreditLimit(parseFloat(e.target.value) || 0)}
+                    onValueChange={setCreditLimit}
+                    placeholder="Ex: 1.000,00"
                     className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900 font-bold"
                   />
                 </div>
