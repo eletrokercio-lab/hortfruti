@@ -11,6 +11,7 @@ import {
   Printer,
   UserCog,
   ArrowRightLeft,
+  Trash2,
 } from 'lucide-react';
 import { Order } from '../../types';
 import { formatBRL, formatDate, getOrderStatusBadge, getPaymentTermLabel } from '../../utils/formatters';
@@ -36,7 +37,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   onClose,
   initialDriverPick,
 }) => {
-  const { updateOrderStatus, setDeliveryAssignment, deliveries, setCurrentTab } = useApp();
+  const { updateOrderStatus, deleteOrder, setDeliveryAssignment, deliveries, setCurrentTab } = useApp();
   const [drivers, setDrivers] = useState<DriverProfile[]>([]);
   const [showDriverPick, setShowDriverPick] = useState(false);
   const [assignDone, setAssignDone] = useState<string | null>(null);
@@ -76,6 +77,16 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     updateOrderStatus(order.id, 'em_rota');
     setShowDriverPick(true);
     setAssignDone(null);
+  };
+
+  // Excluir pedido (remove também entrega e recebível)
+  const handleDelete = () => {
+    const ok = window.confirm(
+      `Excluir o pedido ${order.orderNumber} de ${order.customerName} (${formatBRL(order.total)})?\n\nIsso remove também a entrega e a conta a receber. Não pode ser desfeito.`
+    );
+    if (!ok) return;
+    deleteOrder(order.id);
+    onClose();
   };
 
   const handlePickDriver = (drv: DriverProfile) => {
@@ -345,12 +356,22 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               <span className="text-xs text-gray-500">Valor Final:</span>
               <p className="text-2xl font-black text-emerald-800">{formatBRL(order.total)}</p>
             </div>
-            <button
-              onClick={onClose}
-              className="rounded-xl bg-gray-900 px-5 py-2 text-xs font-bold text-white hover:bg-black"
-            >
-              Fechar
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleDelete}
+                title="Excluir este pedido"
+                className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir
+              </button>
+              <button
+                onClick={onClose}
+                className="rounded-xl bg-gray-900 px-5 py-2 text-xs font-bold text-white hover:bg-black"
+              >
+                Fechar
+              </button>
+            </div>
           </div>
         </div>
       </div>

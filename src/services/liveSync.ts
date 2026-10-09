@@ -515,6 +515,22 @@ export const liveSync = {
     }
   },
 
+  // Exclusão de pedido no Supabase: entrega, recebível, pedido (itens caem por cascade) e notificações
+  deleteOrder: async (orderId: string, orderNumber?: string): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('deliveries').delete().eq('order_id', orderId);
+      await client.from('accounts_receivable').delete().eq('order_id', orderId);
+      await client.from('orders').delete().eq('id', orderId);
+      if (orderNumber) {
+        await client.from('notifications').delete().like('message', `*${orderNumber}*`);
+      }
+    } catch {
+      // silencioso: o pedido já foi removido localmente
+    }
+  },
+
   pushPromotion: async (p: Promotion): Promise<void> => {
     const client = getSupabaseClient();
     if (!client) return;

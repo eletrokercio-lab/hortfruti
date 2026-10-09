@@ -108,6 +108,7 @@ interface AppContextType {
     paymentTerm?: PaymentTerm;
   }) => Order;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
+  deleteOrder: (orderId: string) => void;
 
   updateDeliveryStatus: (deliveryId: string, status: DeliveryStatus) => void;
   setDeliveryAssignment: (deliveryId: string, driverProfileId: string, driverName: string) => void;
@@ -564,7 +565,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const customer = customers.find((c) => c.id === orderData.customerId);
     if (!customer) throw new Error('Cliente não encontrado');
 
-    const orderSeq = orders.length + 104;
+    // Numeração única: nunca colide com pedidos já existentes (inclusive os lançados direto no banco)
+    let orderSeq = orders.length + 104;
+    while (
+      orders.some(
+        (o) => o.id === `ord-${orderSeq}` || o.orderNumber === `PED-${orderSeq}`
+      )
+    ) {
+      orderSeq++;
+    }
     const orderNumber = `PED-${orderSeq}`;
     const orderId = `ord-${orderSeq}`;
     const deliveryId = `del-${orderSeq + 100}`;
@@ -816,6 +825,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
     }
+  };
+
+  // Excluir pedido: remove pedido, itens, entrega, recebível e notificações (local + Supabase)
+  const deleteOrder = (orderId: string) => {
+    const order = orders.find((o) => o.id === orderId);
+    setOrders((prev) => prev.filter((o) => o.id !== orderId));
+    setDeliveries((prev) => prev.filter((d) => d.orderId !== orderId));
+    setReceivables((prev) => prev.filter((r) => r.orderId !== orderId));
+    if (order?.orderNumber) {
+      setNotifications((prev) =>
+        prev.filter((n) => !n.message?.includes(order.orderNumber))
+      );
+    }
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.deleteOrder(orderId, order?.orderNumber);
+    })();
   };
 
   const updateDeliveryStatus = (deliveryId: string, status: DeliveryStatus) => {
@@ -1677,6 +1703,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         createOrder,
         updateOrderStatus,
+        deleteOrder,
         updateDeliveryStatus,
         setDeliveryAssignment,
         confirmDelivery,
