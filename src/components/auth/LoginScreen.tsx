@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Eye, EyeOff, Lock, Mail, Phone, Building2, User, ArrowLeft, Sparkles } from 'lucide-react';
+import logo from '../../assets/logo.png';
 import { useAuth } from '../../context/AuthContext';
 
 export const LoginScreen: React.FC = () => {
@@ -94,9 +95,7 @@ export const LoginScreen: React.FC = () => {
       <div className="w-full max-w-md">
         {/* Marca */}
         <div className="mb-6 flex flex-col items-center text-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-500 text-3xl shadow-lg">
-            🥬
-          </div>
+          <img src={logo} alt="G. Less Hortifruti" className="h-24 w-auto drop-shadow-lg" />
           <h1 className="mt-3 text-2xl font-black tracking-tight text-white">HortiGestão</h1>
           <p className="text-sm text-emerald-200">Distribuidora Inteligente de Hortifruti</p>
         </div>

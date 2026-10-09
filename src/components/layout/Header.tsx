@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
+import logo from '../../assets/logo.png';
 
 interface HeaderProps {
   onOpenMobileMenu: () => void;
@@ -53,9 +54,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
         </button>
 
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setCurrentTab('dashboard')}>
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-xs font-black text-lg">
-            🥬
-          </div>
+          <img src={logo} alt="G. Less Hortifruti" className="h-9 w-auto" />
           <div>
             <div className="flex items-center gap-1.5">
               <span className="text-base font-bold tracking-tight text-gray-900">HortiGestão</span>
@@ -63,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
                 v3.0
               </span>
             </div>
-            <p className="hidden text-[11px] text-gray-500 sm:block leading-none">Distribuidora Inteligente</p>
+            <p className="hidden text-[11px] text-gray-500 sm:block leading-none">G. Less Hortifruti · Distribuidora</p>
           </div>
         </div>
       </div>
