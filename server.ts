@@ -764,6 +764,61 @@ ${JSON.stringify(systemContext || {}, null, 2)}
             suggestedAction = priceAction;
           }
 
+          // Fallback de pedido pronto: "adiciona o pedido do X: 10 cx de tomate a 80,00 e 5 kg de almeirao"
+          let orderAction: any = null;
+          const norm = (s: string) =>
+            String(s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          const isOrderIntent =
+            /\bpedidos?\b/.test(qLower) &&
+            /(adicion|lan[çc]a|cadastr|inclu|inser|faz|manda|envia|registra|puxa|anota)\w*\s+(o|os|um|a|as|meu|minha)?\s*pedidos?\b/.test(qLower);
+          if (isOrderIntent) {
+            const qNorm = norm(question);
+            const todayStr: string =
+              typeof sysCtx.todayDate === 'string' ? sysCtx.todayDate : new Date().toISOString().split('T')[0];
+            const cust = customers
+              .map((c: any) => ({ id: c.customerId, name: String(c.name) }))
+              .filter((c) => qNorm.includes(norm(c.name)))
+              .sort((a, b) => b.name.length - a.name.length)[0];
+            if (cust) {
+              const items = products
+                .map((p: any) => ({ productId: p.productId, name: String(p.name), n: norm(p.name) }))
+                .filter((p) => p.n && qNorm.includes(p.n))
+                .map((p) => {
+                  const idx = qNorm.indexOf(p.n);
+                  const before = qNorm.slice(Math.max(0, idx - 30), idx);
+                  // ignora número que seja preço do item anterior ("... a 80,00")
+                  const beforeClean = before.replace(/(?:\ba\b|\bpor\b|@)\s*r?\$?\s*\d{1,4}(?:[.,]\d{1,2})?\s*$/, ' ');
+                  const nums = beforeClean.match(/(\d+(?:[.,]\d+)?)/g) || [];
+                  const qty = nums.length ? Number(nums[nums.length - 1].replace(',', '.')) : 0;
+                  const after = qNorm.slice(idx + p.n.length, idx + p.n.length + 18);
+                  const priceM = after.match(/(?:\ba\b|\bpor\b|@)\s*r?\$?\s*(\d{1,4}(?:[.,]\d{1,2})?)/);
+                  const unitPrice = priceM ? Number(priceM[1].replace(',', '.')) : undefined;
+                  return { productId: p.productId, quantity: qty, unitPrice };
+                })
+                .filter((it) => it.quantity > 0);
+              if (items.length > 0) {
+                let deliveryDate = todayStr;
+                const base = new Date(todayStr + 'T12:00:00');
+                if (/depois\s+de\s+amanh/.test(qNorm)) base.setDate(base.getDate() + 2);
+                else if (/amanh/.test(qNorm)) base.setDate(base.getDate() + 1);
+                deliveryDate = base.toISOString().split('T')[0];
+                let paymentMethod: string | undefined;
+                if (/\bpix\b/.test(qNorm)) paymentMethod = 'pix';
+                else if (/[aà]\s*vista/.test(qNorm)) paymentMethod = 'cash';
+                else if (/\bprazo\b/.test(qNorm)) paymentMethod = 'credit';
+                orderAction = {
+                  type: 'EXECUTE_CREATE_ORDER',
+                  label: `Adicionar pedido de ${cust.name} (${items.length} ${items.length === 1 ? 'item' : 'itens'})`,
+                  tab: 'orders',
+                  data: { customerId: cust.id, items, deliveryDate, paymentMethod },
+                };
+              }
+            }
+          }
+          if (orderAction && (!suggestedAction || suggestedAction.type.startsWith('NAVIGATE'))) {
+            suggestedAction = orderAction;
+          }
+
           if (!suggestedAction) {
             const navActions: { keywords: string[]; action: { type: string; label: string; tab: string } }[] = [
             { keywords: ['comprar', 'necessidade de compra', 'compra de fornecedor'], action: { type: 'NAVIGATE_PLANNING_PURCHASE', label: 'Ver Necessidades e Resolver Compras', tab: 'planning' } },
