@@ -100,14 +100,28 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
 
   const handleSavePrice = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!priceProductId || customPriceVal <= 0) return;
-    const selected = products.find((p) => p.id === priceProductId);
     const term = priceSearch.trim().toLowerCase();
-    if (term && selected && selected.name.toLowerCase() !== term) {
-      alert('Escolha um produto da lista de busca antes de salvar.');
+
+    // Se o usuário digitou o nome sem clicar na sugestão, resolve sozinho:
+    // 1) correspondência exata de nome; 2) único produto que casa com o termo.
+    let productId = priceProductId;
+    if (!productId && term) {
+      const exact = products.find((p) => p.name.toLowerCase() === term);
+      const partial = products.filter((p) => p.name.toLowerCase().includes(term));
+      if (exact) productId = exact.id;
+      else if (partial.length === 1) productId = partial[0].id;
+    }
+
+    if (!productId || customPriceVal <= 0) {
+      alert(
+        !productId
+          ? 'Escolha um produto da lista antes de salvar: digite o nome e clique na opção que aparecer embaixo.'
+          : 'Informe um preço maior que zero.'
+      );
       return;
     }
-    setCustomerCustomPrice(customer.id, priceProductId, customPriceVal);
+    setPriceProductId(productId);
+    setCustomerCustomPrice(customer.id, productId, customPriceVal);
     setIsPriceModalOpen(false);
   };
 
@@ -699,10 +713,14 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                   Preço Especial para este Cliente (R$)
                 </label>
                 <input
-                  type="number"
-                  step="0.1"
-                  value={customPriceVal}
-                  onChange={(e) => setCustomPriceVal(parseFloat(e.target.value) || 0)}
+                  type="text"
+                  inputMode="decimal"
+                  value={customPriceVal ? String(customPriceVal).replace('.', ',') : ''}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(',', '.').replace(/[^0-9.]/g, '');
+                    setCustomPriceVal(parseFloat(raw) || 0);
+                  }}
+                  placeholder="Ex: 5,50"
                   className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs font-bold text-gray-900"
                 />
               </div>
