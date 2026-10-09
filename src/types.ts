@@ -201,6 +201,8 @@ export interface HarvestPlan {
   responsible: string;
   status: HarvestStatus;
   notes?: string;
+  supplierId?: string;
+  supplierName?: string;
 }
 
 export interface PurchaseItem {

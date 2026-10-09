@@ -45,7 +45,7 @@ export const PlanningView: React.FC = () => {
   const buildHarvestText = () => {
     const lines = harvestPlans.map(
       (hp, i) =>
-        `${i + 1}) ${hp.productName}\n   Colher: ${hp.harvestQty} ${hp.unit} (necessário ${hp.neededQty} ${hp.unit})\n   Data: ${formatDate(hp.date)} · Responsável: ${hp.responsible} · ${harvestStatusLabel(hp.status)}${hp.notes ? `\n   Obs: ${hp.notes}` : ''}`
+        `${i + 1}) ${hp.productName}\n   Colher: ${hp.harvestQty} ${hp.unit} (necessário ${hp.neededQty} ${hp.unit})\n   Data: ${formatDate(hp.date)} · Responsável: ${hp.responsible}${hp.supplierName ? `\n   Fornecedor: ${hp.supplierName}` : ''} · ${harvestStatusLabel(hp.status)}${hp.notes ? `\n   Obs: ${hp.notes}` : ''}`
     );
     return `🧺 ORDEM DE COLHEITA (${harvestPlans.length} ${harvestPlans.length === 1 ? 'item' : 'itens'})\n\n${lines.join('\n\n')}`;
   };
@@ -82,6 +82,7 @@ export const PlanningView: React.FC = () => {
             <td><strong>${hp.harvestQty} ${hp.unit}</strong></td>
             <td>${formatDate(hp.date)}</td>
             <td>${hp.responsible}</td>
+            <td>${hp.supplierName || '—'}</td>
             <td>${harvestStatusLabel(hp.status)}</td>
           </tr>`
       )
@@ -102,7 +103,7 @@ export const PlanningView: React.FC = () => {
       </style></head><body>
       <h1>Ordem de Colheita</h1>
       <p class="sub">Emitida em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${harvestPlans.length} ${harvestPlans.length === 1 ? 'item' : 'itens'}</p>
-      <table><thead><tr><th>Produto</th><th>Necessário</th><th>A Colher</th><th>Data</th><th>Responsável</th><th>Status</th></tr></thead>
+      <table><thead><tr><th>Produto</th><th>Necessário</th><th>A Colher</th><th>Data</th><th>Responsável</th><th>Fornecedor</th><th>Status</th></tr></thead>
       <tbody>${rows}</tbody></table>
       <script>window.onload=function(){window.print();}</script>
       </body></html>`);
@@ -124,6 +125,7 @@ export const PlanningView: React.FC = () => {
   const [harvestQty, setHarvestQty] = useState<number>(25);
   const [harvestDate, setHarvestDate] = useState('');
   const [harvestResponsible, setHarvestResponsible] = useState('Sebastião (Horta Mogi)');
+  const [harvestSupplierId, setHarvestSupplierId] = useState('');
   const [harvestNotes, setHarvestNotes] = useState('');
 
   const needs = calculateProductNeeds();
@@ -163,6 +165,7 @@ export const PlanningView: React.FC = () => {
   const handleOpenHarvestModal = (preselectedProduct?: any) => {
     const today = new Date().toISOString().split('T')[0];
     setHarvestDate(today);
+    setHarvestSupplierId('');
 
     if (preselectedProduct) {
       setHarvestProductId(preselectedProduct.productId);
@@ -190,15 +193,28 @@ export const PlanningView: React.FC = () => {
     e.preventDefault();
     if (!harvestProductId) return;
 
+    const supplier = suppliers.find((s) => s.id === harvestSupplierId);
     createHarvestPlan(
       harvestProductId,
       harvestNeededQty,
       harvestQty,
       harvestDate,
       harvestResponsible,
-      harvestNotes
+      harvestNotes,
+      supplier ? { id: supplier.id, name: supplier.name } : undefined
     );
     setIsHarvestModalOpen(false);
+  };
+
+  // Envia uma ordem de colheita para o WhatsApp do fornecedor vinculado
+  const sendHarvestToSupplier = (hp: any) => {
+    const supplier = suppliers.find((s) => s.id === hp.supplierId);
+    const phone = (supplier?.whatsapp || supplier?.phone || '').replace(/\D/g, '');
+    const text = `🧺 *ORDEM DE COLHEITA*\n\nProduto: ${hp.productName}\nColher: ${hp.harvestQty} ${hp.unit} (necessário ${hp.neededQty} ${hp.unit})\nData: ${formatDate(hp.date)}\nResponsável: ${hp.responsible}${hp.notes ? `\nObs: ${hp.notes}` : ''}`;
+    const url = phone
+      ? `https://wa.me/55${phone}?text=${encodeURIComponent(text)}`
+      : `https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
   };
 
   return (
@@ -409,7 +425,9 @@ export const PlanningView: React.FC = () => {
                 Nenhum plano de colheita cadastrado.
               </div>
             ) : (
-              harvestPlans.map((hp) => (
+              harvestPlans.map((hp) => {
+                const cardSupplier = suppliers.find((s) => s.id === hp.supplierId);
+                return (
                 <div
                   key={hp.id}
                   className="rounded-2xl border border-gray-200 bg-white p-4 shadow-2xs space-y-3"
@@ -420,6 +438,12 @@ export const PlanningView: React.FC = () => {
                       <p className="text-[11px] text-gray-500">
                         Responsável: <span className="font-semibold text-gray-700">{hp.responsible}</span>
                       </p>
+                      {cardSupplier && (
+                        <p className="mt-0.5 flex items-center gap-1 text-[11px] text-gray-500">
+                          <ShoppingCart className="h-3 w-3 text-emerald-600" />
+                          Fornecedor: <span className="font-semibold text-gray-700">{cardSupplier.name}</span>
+                        </p>
+                      )}
                     </div>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -464,6 +488,15 @@ export const PlanningView: React.FC = () => {
                   <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
                     <span className="text-[10px] font-bold text-gray-400 uppercase">Status:</span>
                     <div className="flex items-center gap-2">
+                      {cardSupplier && (
+                        <button
+                          onClick={() => sendHarvestToSupplier(hp)}
+                          title={`Enviar ordem para ${cardSupplier.name} no WhatsApp`}
+                          className="rounded-lg border border-emerald-200 bg-emerald-50 p-1.5 text-emerald-600 hover:bg-emerald-100 transition-colors"
+                        >
+                          <MessageCircle className="h-3.5 w-3.5" />
+                        </button>
+                      )}
                       <select
                         value={hp.status}
                         onChange={(e) => updateHarvestStatus(hp.id, e.target.value as any)}
@@ -488,7 +521,8 @@ export const PlanningView: React.FC = () => {
                     </div>
                   </div>
                 </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>
@@ -646,6 +680,29 @@ export const PlanningView: React.FC = () => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Fornecedor / Produtor <span className="text-gray-400 font-normal">(quem vai entregar a colheita)</span>
+                </label>
+                <select
+                  value={harvestSupplierId}
+                  onChange={(e) => setHarvestSupplierId(e.target.value)}
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                >
+                  <option value="">— Sem fornecedor vinculado —</option>
+                  {suppliers.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}{s.whatsapp || s.phone ? ` · ${s.whatsapp || s.phone}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {suppliers.length === 0 && (
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    Nenhum fornecedor cadastrado ainda. Cadastre na aba Fornecedores.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

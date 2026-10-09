@@ -148,7 +148,8 @@ interface AppContextType {
     harvestQty: number,
     date: string,
     responsible: string,
-    notes?: string
+    notes?: string,
+    supplier?: { id: string; name: string }
   ) => HarvestPlan;
   updateHarvestStatus: (id: string, status: HarvestPlan['status']) => void;
   deleteHarvestPlan: (id: string) => void;
@@ -1255,7 +1256,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     harvestQty: number,
     date: string,
     responsible: string,
-    notes?: string
+    notes?: string,
+    supplier?: { id: string; name: string }
   ): HarvestPlan => {
     const product = products.find((p) => p.id === productId);
     const newPlan: HarvestPlan = {
@@ -1269,6 +1271,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       responsible,
       status: 'pendente',
       notes,
+      supplierId: supplier?.id,
+      supplierName: supplier?.name,
     };
     setHarvestPlans((prev) => [newPlan, ...prev]);
     return newPlan;
