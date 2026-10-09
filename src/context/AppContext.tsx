@@ -151,6 +151,7 @@ interface AppContextType {
     notes?: string
   ) => HarvestPlan;
   updateHarvestStatus: (id: string, status: HarvestPlan['status']) => void;
+  deleteHarvestPlan: (id: string) => void;
 
   createExpense: (expense: Omit<Expense, 'id'>) => Expense;
   receivePayment: (receivableId: string, amount: number, paymentMethod: PaymentMethod) => void;
@@ -171,6 +172,16 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Reset único do cache local: quando a versão muda, limpa dados antigos
+  // (ex.: dados de teste/demonstração) e recomeça limpo em todos os aparelhos.
+  const DATA_VERSION = '2';
+  if (typeof window !== 'undefined' && localStorage.getItem('hg_data_version') !== DATA_VERSION) {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('hg_') && key !== 'hg_data_version') localStorage.removeItem(key);
+    }
+    localStorage.setItem('hg_data_version', DATA_VERSION);
+  }
+
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
   const [userRole, setUserRole] = useState<UserRole>('admin');
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -1264,6 +1275,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHarvestPlans((prev) => prev.map((h) => (h.id === id ? { ...h, status } : h)));
   };
 
+  const deleteHarvestPlan = (id: string) => {
+    setHarvestPlans((prev) => prev.filter((h) => h.id !== id));
+  };
+
   // Expenses & Cash Flow
   const createExpense = (expenseData: Omit<Expense, 'id'>): Expense => {
     const newExpense: Expense = {
@@ -1561,6 +1576,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createPurchase,
         createHarvestPlan,
         updateHarvestStatus,
+        deleteHarvestPlan,
 
         createExpense,
         receivePayment,

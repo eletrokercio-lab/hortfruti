@@ -8,6 +8,7 @@ import {
   AlertCircle,
   Clock,
   ArrowRight,
+  Trash2,
   X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -19,6 +20,7 @@ export const PlanningView: React.FC = () => {
     harvestPlans,
     createHarvestPlan,
     updateHarvestStatus,
+    deleteHarvestPlan,
     products,
     suppliers,
     createPurchase,
@@ -358,16 +360,29 @@ export const PlanningView: React.FC = () => {
 
                   <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
                     <span className="text-[10px] font-bold text-gray-400 uppercase">Status:</span>
-                    <select
-                      value={hp.status}
-                      onChange={(e) => updateHarvestStatus(hp.id, e.target.value as any)}
-                      className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-800"
-                    >
-                      <option value="pendente">Pendente</option>
-                      <option value="em_preparacao">Em Preparação</option>
-                      <option value="colhendo">Colhendo</option>
-                      <option value="concluido">Concluído</option>
-                    </select>
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={hp.status}
+                        onChange={(e) => updateHarvestStatus(hp.id, e.target.value as any)}
+                        className="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-800"
+                      >
+                        <option value="pendente">Pendente</option>
+                        <option value="em_preparacao">Em Preparação</option>
+                        <option value="colhendo">Colhendo</option>
+                        <option value="concluido">Concluído</option>
+                      </select>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Excluir a ordem de colheita de ${hp.productName}?`)) {
+                            deleteHarvestPlan(hp.id);
+                          }
+                        }}
+                        title="Excluir ordem de colheita"
+                        className="rounded-lg border border-rose-200 bg-rose-50 p-1.5 text-rose-600 hover:bg-rose-100 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))
