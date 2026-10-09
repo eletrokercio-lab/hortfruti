@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS public.app_profiles (
   id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   email TEXT NOT NULL UNIQUE,
   full_name TEXT,
+  phone TEXT,
   role TEXT NOT NULL DEFAULT 'comprador'
     CHECK (role IN ('master','operador','entregador','comprador')),
   customer_id TEXT REFERENCES public.customers(id),

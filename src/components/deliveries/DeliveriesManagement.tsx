@@ -40,6 +40,7 @@ export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGo
   // ===== Modal rápido: Novo Entregador =====
   const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
   const [drvName, setDrvName] = useState('');
+  const [drvPhone, setDrvPhone] = useState('');
   const [drvEmail, setDrvEmail] = useState('');
   const [drvPass, setDrvPass] = useState('');
   const [drvSaving, setDrvSaving] = useState(false);
@@ -71,6 +72,7 @@ export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGo
           email: drvEmail.trim().toLowerCase(),
           password: drvPass,
           fullName: drvName.trim(),
+          phone: drvPhone.trim(),
           role: 'entregador',
           driverName: drvName.trim(),
         }),
@@ -85,6 +87,7 @@ export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGo
         text: `Entregador "${drvName.trim()}" criado! Ele já pode entrar no app com o e-mail e a senha cadastrados.`,
       });
       setDrvName('');
+      setDrvPhone('');
       setDrvEmail('');
       setDrvPass('');
     } catch (err: any) {
@@ -531,6 +534,18 @@ export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGo
                   value={drvName}
                   onChange={(e) => setDrvName(e.target.value)}
                   placeholder="Ex.: João da entrega"
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-gray-700">
+                  Telefone / WhatsApp
+                </label>
+                <input
+                  type="tel"
+                  value={drvPhone}
+                  onChange={(e) => setDrvPhone(e.target.value)}
+                  placeholder="(93) 99999-9999"
                   className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
                 />
               </div>

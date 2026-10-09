@@ -285,7 +285,7 @@ app.post('/api/admin/users', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { email, password, fullName, role, customerId, driverName } = req.body;
+    const { email, password, fullName, phone, role, customerId, driverName } = req.body;
 
     // Operador pode cadastrar APENAS entregadores (fluxo de expedição)
     if (gate.role === 'operador' && role !== 'entregador') {
@@ -310,7 +310,7 @@ app.post('/api/admin/users', async (req: Request, res: Response) => {
         email: email.trim().toLowerCase(),
         password,
         email_confirm: true,
-        user_metadata: { full_name: fullName || '', role },
+        user_metadata: { full_name: fullName || '', phone: phone || '', role },
       }),
     });
 
@@ -330,6 +330,7 @@ app.post('/api/admin/users', async (req: Request, res: Response) => {
     };
     if (customerId) profilePatch.customer_id = customerId;
     if (driverName) profilePatch.driver_name = driverName;
+    if (phone) profilePatch.phone = phone;
 
     // Comprador sem vínculo: cria o cadastro de cliente via service_role
     // (garante o vínculo mesmo se o trigger de auto-vínculo não estiver aplicado)
