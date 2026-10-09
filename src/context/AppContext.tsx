@@ -683,6 +683,18 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     (async () => {
       const { liveSync } = await import('../services/liveSync');
       await liveSync.pushOrderStatus(orderId, status);
+      // A entrega vinculada acompanha o status do pedido (nos dois aparelhos)
+      const linked = deliveries.find((d) => d.orderId === orderId);
+      const deliveryMap: Partial<Record<Order['status'], DeliveryStatus>> = {
+        em_separacao: 'a_preparar',
+        pronto: 'separado',
+        em_rota: 'em_rota',
+        entregue: 'entregue',
+      };
+      const ds = deliveryMap[status];
+      if (linked && ds) {
+        await liveSync.pushDeliveryStatus(linked.id, ds);
+      }
     })();
 
     // Synchronize delivery status
@@ -792,15 +804,22 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Persistir no Supabase (entregador inicia/finaliza de outro aparelho)
     const delivery = deliveries.find((d) => d.id === deliveryId);
+    // Status da entrega reflete no pedido (comprador acompanha na linha do tempo)
+    const orderStatusByDelivery: Partial<Record<DeliveryStatus, Order['status']>> = {
+      a_preparar: 'em_separacao',
+      separado: 'pronto',
+      em_rota: 'em_rota',
+      entregue: 'entregue',
+    };
     (async () => {
       try {
         const { liveSync } = await import('../services/liveSync');
         await liveSync.pushDeliveryStatus(deliveryId, status);
-        // Pedido acompanha: em rota quando o motorista sai, entregue se concluído
-        if (delivery?.orderId && (status === 'em_rota' || status === 'entregue')) {
-          await liveSync.pushOrderStatus(delivery.orderId, status === 'em_rota' ? 'em_rota' : 'entregue');
+        const os = delivery?.orderId ? orderStatusByDelivery[status] : undefined;
+        if (delivery?.orderId && os) {
+          await liveSync.pushOrderStatus(delivery.orderId, os);
           setOrders((prev) =>
-            prev.map((o) => (o.id === delivery.orderId ? { ...o, status } : o))
+            prev.map((o) => (o.id === delivery.orderId ? { ...o, status: os } : o))
           );
         }
       } catch {

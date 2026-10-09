@@ -885,7 +885,22 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
               <p className="py-10 text-center text-sm text-gray-500">Você ainda não fez pedidos. Comece pelo Catálogo!</p>
             )}
             {orders.map((o) => {
-              const stepIndex = orderStatusSteps.findIndex((s) => s.key === o.status);
+              // Status efetivo: o mais avançado entre o pedido e a entrega vinculada
+              const del = deliveries.find((d) => d.orderId === o.id);
+              const delAsOrder: Record<string, string> = {
+                a_preparar: 'em_separacao',
+                separado: 'pronto',
+                em_rota: 'em_rota',
+                entregue: 'entregue',
+              };
+              const delStatus = del ? delAsOrder[del.status] : undefined;
+              const orderIdx = orderStatusSteps.findIndex((s) => s.key === o.status);
+              const delIdx = delStatus
+                ? orderStatusSteps.findIndex((s) => s.key === delStatus)
+                : -1;
+              const effectiveStatus =
+                delIdx > orderIdx ? orderStatusSteps[delIdx].key : o.status;
+              const stepIndex = orderStatusSteps.findIndex((s) => s.key === effectiveStatus);
               const items = orderItems[o.id] || [];
               return (
                 <div key={o.id} className="rounded-xl border border-gray-200 bg-white p-4 shadow-xs">
