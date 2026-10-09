@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   ShoppingBag,
@@ -9,10 +9,19 @@ import {
   CheckCircle,
   Clock,
   Printer,
+  UserCog,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { Order } from '../../types';
 import { formatBRL, formatDate, getOrderStatusBadge, getPaymentTermLabel } from '../../utils/formatters';
 import { useApp } from '../../context/AppContext';
+import { getSupabaseClient } from '../../lib/supabase';
+
+interface DriverProfile {
+  id: string;
+  full_name: string | null;
+  driver_name: string | null;
+}
 
 interface OrderDetailModalProps {
   order: Order | null;
@@ -25,11 +34,59 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { updateOrderStatus, setCurrentTab } = useApp();
+  const { updateOrderStatus, setDeliveryAssignment, deliveries, setCurrentTab } = useApp();
+  const [drivers, setDrivers] = useState<DriverProfile[]>([]);
+  const [showDriverPick, setShowDriverPick] = useState(false);
+  const [assignDone, setAssignDone] = useState<string | null>(null);
+
+  // Carrega entregadores ativos
+  useEffect(() => {
+    if (!isOpen) return;
+    (async () => {
+      const client = getSupabaseClient();
+      if (!client) return;
+      const { data } = await client
+        .from('app_profiles')
+        .select('id, full_name, driver_name')
+        .eq('role', 'entregador')
+        .eq('status', 'ativo');
+      if (data) setDrivers(data as any);
+    })();
+  }, [isOpen]);
+
+  // Fecha painéis auxiliares ao trocar de pedido
+  useEffect(() => {
+    setShowDriverPick(false);
+    setAssignDone(null);
+  }, [order?.id]);
 
   if (!isOpen || !order) return null;
 
   const badge = getOrderStatusBadge(order.status);
+
+  // Entrega vinculada a este pedido
+  const delivery = deliveries.find((d) => d.orderId === order.id) ||
+    deliveries.find((d) => d.orderNumber === order.orderNumber);
+
+  // "Em Rota": muda status e abre o seletor de entregador na sequência
+  const handleGoRoute = () => {
+    updateOrderStatus(order.id, 'em_rota');
+    setShowDriverPick(true);
+    setAssignDone(null);
+  };
+
+  const handlePickDriver = (drv: DriverProfile) => {
+    if (delivery) {
+      const name = drv.driver_name || drv.full_name || 'Entregador';
+      setDeliveryAssignment(delivery.id, drv.id, name);
+      setAssignDone(name);
+      setShowDriverPick(false);
+    } else {
+      // sem entrega vinculada: manda para a tela de entregas para delegar lá
+      setCurrentTab('deliveries');
+      onClose();
+    }
+  };
 
   const handlePrint = () => {
     window.print();
@@ -143,6 +200,77 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             </div>
           )}
 
+          {/* Confirmação de envio ao entregador */}
+          {assignDone && (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50 p-3 text-xs text-emerald-900 flex items-center gap-2">
+              <CheckCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+              <span>
+                Entrega enviada para <b>{assignDone}</b> — já aparece no app dele em "Minhas Entregas".
+              </span>
+            </div>
+          )}
+
+          {/* Seletor de entregador (abre ao colocar em rota) */}
+          {showDriverPick && (
+            <div className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-4">
+              <p className="flex items-center gap-2 text-xs font-bold text-indigo-900 uppercase tracking-wider mb-1">
+                <Truck className="h-4 w-4" />
+                Pedido em rota — escolha o entregador
+              </p>
+              <p className="text-[11px] text-indigo-700 mb-3">
+                {delivery
+                  ? `A entrega do pedido ${order.orderNumber} será enviada para o app do entregador selecionado.`
+                  : 'Entrega não localizada para este pedido — delegue na tela de Entregas.'}
+              </p>
+              {drivers.length === 0 ? (
+                <p className="text-[11px] text-gray-500">Nenhum entregador cadastrado. Crie a conta dele no Painel Master.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {drivers.map((drv) => {
+                    const nome = drv.driver_name || drv.full_name || 'Entregador';
+                    const jaEh = delivery?.driverName === nome;
+                    return (
+                      <button
+                        key={drv.id}
+                        onClick={() => handlePickDriver(drv)}
+                        className={`flex items-center justify-between rounded-lg border px-3 py-2 text-xs font-bold transition-colors ${
+                          jaEh
+                            ? 'border-indigo-400 bg-indigo-600 text-white'
+                            : 'border-indigo-200 bg-white text-indigo-900 hover:bg-indigo-100'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <UserCog className="h-3.5 w-3.5" />
+                          {nome}
+                          {jaEh && <span className="text-[9px] font-black uppercase">atual</span>}
+                        </span>
+                        {delivery && (
+                          <ArrowRightLeft className="h-3.5 w-3.5 opacity-70" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-between">
+                <button
+                  onClick={() => setShowDriverPick(false)}
+                  className="text-[11px] font-bold text-indigo-700 hover:underline"
+                >
+                  Escolher depois
+                </button>
+                {!delivery && (
+                  <button
+                    onClick={() => { setCurrentTab('deliveries'); onClose(); }}
+                    className="rounded-lg bg-indigo-600 px-3 py-1.5 text-[11px] font-bold text-white hover:bg-indigo-700"
+                  >
+                    Abrir Entregas
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Status Progression Controls */}
           <div className="border border-gray-200 rounded-xl p-4 bg-gray-50/40">
             <h4 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2.5">
@@ -172,7 +300,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
               </button>
 
               <button
-                onClick={() => updateOrderStatus(order.id, 'em_rota')}
+                onClick={handleGoRoute}
                 className={`rounded-lg px-3 py-1.5 text-xs font-bold transition-colors ${
                   order.status === 'em_rota'
                     ? 'bg-indigo-600 text-white'
@@ -193,6 +321,19 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
                 4. Entregue com Sucesso ✅
               </button>
             </div>
+
+            {/* Atalho: trocar entregador quando já está em rota */}
+            {order.status === 'em_rota' && !showDriverPick && (
+              <button
+                onClick={() => setShowDriverPick(true)}
+                className="mt-2.5 flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-[11px] font-bold text-indigo-800 hover:bg-indigo-50"
+              >
+                <UserCog className="h-3.5 w-3.5" />
+                {delivery?.driverName
+                  ? `Entregador atual: ${delivery.driverName} — trocar`
+                  : 'Enviar para um entregador'}
+              </button>
+            )}
           </div>
 
           {/* Total */}
