@@ -144,9 +144,19 @@ const MainLayout: React.FC<{ blocked?: boolean }> = ({ blocked }) => {
             <OrdersList onOpenNewOrder={() => handleOpenNewOrder()} />
           )}
 
-          {!blocked && currentTab === 'deliveries' && <DeliveriesManagement />}
+          {!blocked && currentTab === 'deliveries' && (
+            <DeliveriesManagement onGoToUsers={() => setCurrentTab('users')} />
+          )}
 
-          {!blocked && currentTab === 'driver-app' && <DriverAppView />}
+          {!blocked && currentTab === 'driver-app' && (
+            <DriverAppView
+              onBack={
+                profile?.role === 'entregador' && !supportCustomer
+                  ? undefined
+                  : () => setCurrentTab('deliveries')
+              }
+            />
+          )}
 
           {!blocked && currentTab === 'planning' && <PlanningView />}
 

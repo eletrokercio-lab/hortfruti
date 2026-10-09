@@ -11,9 +11,11 @@ import {
   Layers,
   Search,
   UserCog,
+  UserPlus,
   Printer,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useAuth } from '../../context/AuthContext';
 import { getSupabaseClient } from '../../lib/supabase';
 import { Delivery, DeliveryStatus } from '../../types';
 import { formatDate, getDeliveryStatusBadge } from '../../utils/formatters';
@@ -24,8 +26,15 @@ interface DriverProfile {
   driver_name: string | null;
 }
 
-export const DeliveriesManagement: React.FC = () => {
+interface DeliveriesManagementProps {
+  onGoToUsers?: () => void;
+}
+
+export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGoToUsers }) => {
   const { deliveries, updateDeliveryStatus, setDeliveryAssignment, setCurrentTab } = useApp();
+  const { profile, supportCustomer } = useAuth();
+  // Só o Master (criador) pode cadastrar entregadores — a rota admin é exclusiva dele
+  const isMaster = profile?.role === 'master' && !supportCustomer;
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -164,13 +173,25 @@ export const DeliveriesManagement: React.FC = () => {
           </p>
         </div>
 
-        <button
-          onClick={() => setCurrentTab('driver-app')}
-          className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
-        >
-          <Smartphone className="h-4 w-4" />
-          <span>Abrir Visão do Motorista (Mobile)</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onGoToUsers && isMaster && (
+            <button
+              onClick={onGoToUsers}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
+              title="Cadastrar novo entregador em Usuários & Acessos"
+            >
+              <UserPlus className="h-4 w-4" />
+              <span>Cadastrar Entregador</span>
+            </button>
+          )}
+          <button
+            onClick={() => setCurrentTab('driver-app')}
+            className="flex items-center gap-2 rounded-xl bg-amber-500 hover:bg-amber-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+          >
+            <Smartphone className="h-4 w-4" />
+            <span>Abrir Visão do Motorista (Mobile)</span>
+          </button>
+        </div>
       </div>
 
       {/* KPI row */}

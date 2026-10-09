@@ -13,13 +13,20 @@ import {
   FileText,
   ChevronRight,
   X,
+  ArrowLeft,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useAuth } from '../../context/AuthContext';
 import { Delivery } from '../../types';
 import { formatBRL, formatUnit, getDeliveryStatusBadge } from '../../utils/formatters';
 
-export const DriverAppView: React.FC = () => {
+interface DriverAppViewProps {
+  // Definido apenas quando um master/operador abre a visão do motorista
+  // (o entregador autenticado não recebe — para ele não existe "voltar")
+  onBack?: () => void;
+}
+
+export const DriverAppView: React.FC<DriverAppViewProps> = ({ onBack }) => {
   const { deliveries, updateDeliveryStatus, confirmDelivery, customers } = useApp();
   const { profile, supportCustomer } = useAuth();
 
@@ -111,6 +118,15 @@ export const DriverAppView: React.FC = () => {
       <div className="rounded-2xl bg-amber-600 p-4 text-white shadow-md">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/20 text-white hover:bg-white/30 transition-colors"
+                title="Voltar para Entregas"
+              >
+                <ArrowLeft className="h-4.5 w-4.5" />
+              </button>
+            )}
             <Truck className="h-6 w-6 text-white" />
             <div>
               <h1 className="text-base font-black tracking-tight leading-tight">App do Motorista</h1>
