@@ -157,7 +157,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       }
     };
     sync();
-    const poll = setInterval(sync, 45000);
+    const poll = setInterval(sync, 30000);
     return () => {
       cancelled = true;
       clearInterval(poll);
@@ -176,13 +176,14 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
     }
   };
 
-  const loadData = useCallback(async () => {
+  // silent=true: atualização periódica sem spinner e sem resetar escolhas do comprador
+  const loadData = useCallback(async (silent = false) => {
     const client = getSupabaseClient();
     if (!client) {
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!silent) setLoading(true);
     const today = new Date().toISOString().split('T')[0];
 
     const [prodRes, cpRes, promoRes, ordRes, delRes, crateRes, recRes, settingsRes] = await Promise.all([
@@ -335,12 +336,30 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       }));
     }
 
-    setDeliveryDate(today);
+    if (!silent) setDeliveryDate(today);
     setLoading(false);
   }, [customerId]);
 
   useEffect(() => {
     loadData();
+  }, [loadData]);
+
+  // Atualização periódica (silenciosa): status do pedido muda em tempo quase
+  // real quando o operador separa/coloca em rota e o entregador entrega
+  useEffect(() => {
+    let hidden = false;
+    const poll = setInterval(() => {
+      if (!hidden) loadData(true);
+    }, 30000);
+    const onVisible = () => {
+      hidden = document.visibilityState === 'hidden';
+      if (!hidden) loadData(true);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
   }, [loadData]);
 
   // Preço do produto para este comprador (promoção > preço especial > base)

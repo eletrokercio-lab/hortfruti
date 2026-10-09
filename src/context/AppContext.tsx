@@ -287,6 +287,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })();
   }, []);
 
+  // Atualização periódica de pedidos/entregas/recebíveis: o painel acompanha
+  // em tempo quase real o que o entregador faz em outro aparelho
+  useEffect(() => {
+    let cancelled = false;
+    const pollData = async () => {
+      const { liveSync } = await import('../services/liveSync');
+      if (!liveSync.isAvailable()) return;
+      const remote = await liveSync.pullAll();
+      if (cancelled) return;
+      if (remote.orders.length > 0) setOrders(remote.orders);
+      if (remote.deliveries.length > 0) setDeliveries(remote.deliveries);
+      if (remote.receivables.length > 0) setReceivables(remote.receivables);
+    };
+    const poll = setInterval(pollData, 25000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') pollData();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      cancelled = true;
+      clearInterval(poll);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, []);
+
   // Notificações remotas (staff): pull inicial + atualização a cada 45s
   useEffect(() => {
     let cancelled = false;
@@ -324,7 +349,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     };
     syncNotifications();
-    const poll = setInterval(syncNotifications, 45000);
+    const poll = setInterval(syncNotifications, 25000);
     return () => {
       cancelled = true;
       clearInterval(poll);
@@ -765,10 +790,27 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       prev.map((d) => (d.id === deliveryId ? { ...d, status } : d))
     );
 
+    // Persistir no Supabase (entregador inicia/finaliza de outro aparelho)
+    const delivery = deliveries.find((d) => d.id === deliveryId);
+    (async () => {
+      try {
+        const { liveSync } = await import('../services/liveSync');
+        await liveSync.pushDeliveryStatus(deliveryId, status);
+        // Pedido acompanha: em rota quando o motorista sai, entregue se concluído
+        if (delivery?.orderId && (status === 'em_rota' || status === 'entregue')) {
+          await liveSync.pushOrderStatus(delivery.orderId, status === 'em_rota' ? 'em_rota' : 'entregue');
+          setOrders((prev) =>
+            prev.map((o) => (o.id === delivery.orderId ? { ...o, status } : o))
+          );
+        }
+      } catch {
+        // fallback: permanece somente local
+      }
+    })();
+
     // Notificar comprador + distribuidor quando a entrega sai para rota
-    if (status === 'em_rota') {
-      const delivery = deliveries.find((d) => d.id === deliveryId);
-      if (delivery) notifyDeliveryEvent(delivery, 'em_rota');
+    if (status === 'em_rota' && delivery) {
+      notifyDeliveryEvent(delivery, 'em_rota');
     }
   };
 
