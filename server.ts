@@ -106,7 +106,7 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const validRoles = ['master', 'operador', 'entregador', 'comprador'];
 
-async function requireMaster(req: Request): Promise<{ ok: boolean; error?: string; userId?: string; token?: string }> {
+async function requireMaster(req: Request): Promise<{ ok: boolean; error?: string; userId?: string; token?: string; role?: string }> {
   if (!SUPABASE_SERVICE_ROLE_KEY) {
     return { ok: false, error: 'SUPABASE_SERVICE_ROLE_KEY não configurada no servidor. Adicione em My app > Secrets.' };
   }
@@ -143,7 +143,48 @@ async function requireMaster(req: Request): Promise<{ ok: boolean; error?: strin
     if (profiles[0].role !== 'master') {
       return { ok: false, error: 'Apenas o perfil Master pode administrar usuários.' };
     }
-    return { ok: true, userId: user.id, token };
+    return { ok: true, userId: user.id, token, role: profiles[0].role as string };
+  } catch (err: any) {
+    return { ok: false, error: 'Falha ao validar permissões: ' + err.message };
+  }
+}
+
+// Staff = master (tudo) ou operador (apenas entregadores, para o fluxo de expedição)
+async function requireStaff(req: Request): Promise<{ ok: boolean; error?: string; userId?: string; token?: string; role?: string }> {
+  const token = (req.headers.authorization || '').replace(/^Bearer /i, '').trim();
+  if (!token) {
+    return { ok: false, error: 'Autenticação necessária.' };
+  }
+  try {
+    const userRes = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` },
+    });
+    if (!userRes.ok) return { ok: false, error: 'Sessão inválida ou expirada.' };
+    const user: any = await userRes.json();
+
+    const profRes = await fetch(
+      `${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${user.id}&select=role,status`,
+      { headers: serviceHeaders }
+    );
+    let profiles: any = await profRes.json().catch(() => null);
+    if (!Array.isArray(profiles) || profiles.length === 0) {
+      const profRes2 = await fetch(
+        `${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${user.id}&select=role,status`,
+        { headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${token}` } }
+      );
+      profiles = await profRes2.json().catch(() => null);
+    }
+    if (!Array.isArray(profiles) || profiles.length === 0) {
+      return { ok: false, error: 'Perfil não encontrado no banco.' };
+    }
+    const role = profiles[0].role as string;
+    if (role !== 'master' && role !== 'operador') {
+      return { ok: false, error: 'Sem permissão para cadastrar entregadores.' };
+    }
+    if (profiles[0].status !== 'ativo') {
+      return { ok: false, error: 'Sua conta está bloqueada. Fale com o suporte.' };
+    }
+    return { ok: true, userId: user.id, token, role };
   } catch (err: any) {
     return { ok: false, error: 'Falha ao validar permissões: ' + err.message };
   }
@@ -236,15 +277,21 @@ app.get('/api/admin/users', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/admin/users — cria conta (cliente master, entregador, operador ou comprador)
+// POST /api/admin/users — cria conta (master: todas; operador: somente entregador)
 app.post('/api/admin/users', async (req: Request, res: Response) => {
-  const gate = await requireMaster(req);
+  const gate = await requireStaff(req);
   if (!gate.ok) {
     res.status(403).json({ error: gate.error });
     return;
   }
   try {
     const { email, password, fullName, role, customerId, driverName } = req.body;
+
+    // Operador pode cadastrar APENAS entregadores (fluxo de expedição)
+    if (gate.role === 'operador' && role !== 'entregador') {
+      res.status(403).json({ error: 'Operador só pode cadastrar contas de entregador.' });
+      return;
+    }
 
     if (!email || !password || !role || !validRoles.includes(role)) {
       res.status(400).json({ error: 'Informe e-mail, senha e um papel válido (master, operador, entregador ou comprador).' });

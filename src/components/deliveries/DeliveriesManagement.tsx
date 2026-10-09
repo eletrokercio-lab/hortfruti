@@ -33,8 +33,66 @@ interface DeliveriesManagementProps {
 export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGoToUsers }) => {
   const { deliveries, updateDeliveryStatus, setDeliveryAssignment, setCurrentTab } = useApp();
   const { profile, supportCustomer } = useAuth();
-  // Só o Master (criador) pode cadastrar entregadores — a rota admin é exclusiva dele
-  const isMaster = profile?.role === 'master' && !supportCustomer;
+  // Master e operador podem cadastrar entregadores (servidor limita operador a entregador)
+  const canCreateDriver =
+    (profile?.role === 'master' || profile?.role === 'operador') && !supportCustomer;
+
+  // ===== Modal rápido: Novo Entregador =====
+  const [isDriverModalOpen, setIsDriverModalOpen] = useState(false);
+  const [drvName, setDrvName] = useState('');
+  const [drvEmail, setDrvEmail] = useState('');
+  const [drvPass, setDrvPass] = useState('');
+  const [drvSaving, setDrvSaving] = useState(false);
+  const [drvMsg, setDrvMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const handleCreateDriver = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setDrvMsg(null);
+    if (!drvName.trim() || !drvEmail.trim() || drvPass.length < 6) {
+      setDrvMsg({ ok: false, text: 'Preencha nome, e-mail e senha (mínimo 6 caracteres).' });
+      return;
+    }
+    setDrvSaving(true);
+    try {
+      const client = getSupabaseClient();
+      const { data } = await client!.auth.getSession();
+      const token = data?.session?.access_token;
+      if (!token) {
+        setDrvMsg({ ok: false, text: 'Sessão expirada. Faça login novamente.' });
+        return;
+      }
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          email: drvEmail.trim().toLowerCase(),
+          password: drvPass,
+          fullName: drvName.trim(),
+          role: 'entregador',
+          driverName: drvName.trim(),
+        }),
+      });
+      const j: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDrvMsg({ ok: false, text: j.error || 'Falha ao criar a conta do entregador.' });
+        return;
+      }
+      setDrvMsg({
+        ok: true,
+        text: `Entregador "${drvName.trim()}" criado! Ele já pode entrar no app com o e-mail e a senha cadastrados.`,
+      });
+      setDrvName('');
+      setDrvEmail('');
+      setDrvPass('');
+    } catch (err: any) {
+      setDrvMsg({ ok: false, text: 'Erro de conexão: ' + (err?.message || err) });
+    } finally {
+      setDrvSaving(false);
+    }
+  };
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -174,11 +232,14 @@ export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGo
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          {onGoToUsers && isMaster && (
+          {canCreateDriver && (
             <button
-              onClick={onGoToUsers}
+              onClick={() => {
+                setDrvMsg(null);
+                setIsDriverModalOpen(true);
+              }}
               className="flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
-              title="Cadastrar novo entregador em Usuários & Acessos"
+              title="Criar conta de acesso para um novo entregador"
             >
               <UserPlus className="h-4 w-4" />
               <span>Cadastrar Entregador</span>
@@ -437,6 +498,99 @@ export const DeliveriesManagement: React.FC<DeliveriesManagementProps> = ({ onGo
           })
         )}
       </div>
+
+      {/* Modal: Novo Entregador */}
+      {isDriverModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setIsDriverModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-center gap-2">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-100">
+                <UserPlus className="h-5 w-5 text-emerald-700" />
+              </div>
+              <div>
+                <h2 className="text-sm font-black text-gray-900">Cadastrar Entregador</h2>
+                <p className="text-[11px] text-gray-500">
+                  Cria o login que dá acesso ao App do Motorista
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleCreateDriver} className="space-y-3">
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-gray-700">
+                  Nome do entregador *
+                </label>
+                <input
+                  type="text"
+                  value={drvName}
+                  onChange={(e) => setDrvName(e.target.value)}
+                  placeholder="Ex.: João da entrega"
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-gray-700">
+                  E-mail de acesso *
+                </label>
+                <input
+                  type="email"
+                  value={drvEmail}
+                  onChange={(e) => setDrvEmail(e.target.value)}
+                  placeholder="entregador@email.com"
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-[11px] font-bold text-gray-700">
+                  Senha * <span className="font-normal text-gray-400">(mínimo 6 caracteres)</span>
+                </label>
+                <input
+                  type="text"
+                  value={drvPass}
+                  onChange={(e) => setDrvPass(e.target.value)}
+                  placeholder="Senha inicial de acesso"
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+
+              {drvMsg && (
+                <div
+                  className={`rounded-xl p-2.5 text-[11px] font-semibold ${
+                    drvMsg.ok
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {drvMsg.text}
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsDriverModalOpen(false)}
+                  className="rounded-xl border border-gray-200 px-3.5 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50"
+                >
+                  Fechar
+                </button>
+                <button
+                  type="submit"
+                  disabled={drvSaving}
+                  className="rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {drvSaving ? 'Criando...' : 'Criar Conta'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
