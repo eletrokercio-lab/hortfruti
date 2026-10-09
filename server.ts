@@ -820,7 +820,13 @@ ${JSON.stringify(systemContext || {}, null, 2)}
               }
             }
           }
-          if (orderAction && (!suggestedAction || suggestedAction.type.startsWith('NAVIGATE'))) {
+          // Parse determinístico do pedido prevalece (o modelo costuma errar quantidades)
+          if (
+            orderAction &&
+            (!suggestedAction ||
+              suggestedAction.type.startsWith('NAVIGATE') ||
+              suggestedAction.type === 'EXECUTE_CREATE_ORDER')
+          ) {
             suggestedAction = orderAction;
           }
 
