@@ -782,7 +782,12 @@ ${JSON.stringify(systemContext || {}, null, 2)}
             if (cust) {
               const items = products
                 .map((p: any) => ({ productId: p.productId, name: String(p.name), n: norm(p.name) }))
-                .filter((p) => p.n && qNorm.includes(p.n))
+                .filter((p) => {
+                  if (!p.n) return false;
+                  // casa pelo nome completo ou pela primeira palavra (ex.: "TOMATE ITALIANO" quando a frase diz "tomate")
+                  const first = p.n.split(' ')[0];
+                  return qNorm.includes(p.n) || (first.length >= 4 && qNorm.includes(first));
+                })
                 .map((p) => {
                   const idx = qNorm.indexOf(p.n);
                   const before = qNorm.slice(Math.max(0, idx - 30), idx);
