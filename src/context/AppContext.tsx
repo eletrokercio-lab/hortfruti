@@ -153,6 +153,9 @@ interface AppContextType {
   updateHarvestStatus: (id: string, status: HarvestPlan['status']) => void;
   deleteHarvestPlan: (id: string) => void;
 
+  createSupplier: (data: Omit<Supplier, 'id'>) => Supplier;
+  updateSupplier: (supplier: Supplier) => void;
+
   createExpense: (expense: Omit<Expense, 'id'>) => Expense;
   receivePayment: (receivableId: string, amount: number, paymentMethod: PaymentMethod) => void;
   payBill: (payableId: string, paymentMethod: PaymentMethod) => void;
@@ -1279,6 +1282,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHarvestPlans((prev) => prev.filter((h) => h.id !== id));
   };
 
+  // Suppliers
+  const createSupplier = (data: Omit<Supplier, 'id'>): Supplier => {
+    const newSupplier: Supplier = { ...data, id: `sup-${Date.now()}` };
+    setSuppliers((prev) => [newSupplier, ...prev]);
+    return newSupplier;
+  };
+
+  const updateSupplier = (supplier: Supplier) => {
+    setSuppliers((prev) => prev.map((s) => (s.id === supplier.id ? supplier : s)));
+  };
+
   // Expenses & Cash Flow
   const createExpense = (expenseData: Omit<Expense, 'id'>): Expense => {
     const newExpense: Expense = {
@@ -1577,6 +1591,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         createHarvestPlan,
         updateHarvestStatus,
         deleteHarvestPlan,
+
+        createSupplier,
+        updateSupplier,
 
         createExpense,
         receivePayment,

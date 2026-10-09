@@ -9,6 +9,9 @@ import {
   Clock,
   ArrowRight,
   Trash2,
+  Copy,
+  Printer,
+  MessageCircle,
   X,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
@@ -27,6 +30,84 @@ export const PlanningView: React.FC = () => {
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'needs' | 'harvest'>('needs');
+  const [copiedHarvest, setCopiedHarvest] = useState(false);
+
+  const harvestStatusLabel = (status: string) =>
+    status === 'concluido'
+      ? 'Concluído'
+      : status === 'colhendo'
+      ? 'Colhendo'
+      : status === 'em_preparacao'
+      ? 'Em Preparação'
+      : 'Pendente';
+
+  // Lista de colheita em texto (copiar / WhatsApp / imprimir)
+  const buildHarvestText = () => {
+    const lines = harvestPlans.map(
+      (hp, i) =>
+        `${i + 1}) ${hp.productName}\n   Colher: ${hp.harvestQty} ${hp.unit} (necessário ${hp.neededQty} ${hp.unit})\n   Data: ${formatDate(hp.date)} · Responsável: ${hp.responsible} · ${harvestStatusLabel(hp.status)}${hp.notes ? `\n   Obs: ${hp.notes}` : ''}`
+    );
+    return `🧺 ORDEM DE COLHEITA (${harvestPlans.length} ${harvestPlans.length === 1 ? 'item' : 'itens'})\n\n${lines.join('\n\n')}`;
+  };
+
+  const copyHarvestList = async () => {
+    try {
+      await navigator.clipboard.writeText(buildHarvestText());
+      setCopiedHarvest(true);
+      setTimeout(() => setCopiedHarvest(false), 2000);
+    } catch {
+      // fallback antigo
+      const ta = document.createElement('textarea');
+      ta.value = buildHarvestText();
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setCopiedHarvest(true);
+      setTimeout(() => setCopiedHarvest(false), 2000);
+    }
+  };
+
+  const sendHarvestWhatsapp = () => {
+    window.open(`https://wa.me/?text=${encodeURIComponent(buildHarvestText())}`, '_blank');
+  };
+
+  const printHarvestList = () => {
+    const rows = harvestPlans
+      .map(
+        (hp) => `
+          <tr>
+            <td><strong>${hp.productName}</strong><br/><small>${hp.notes || ''}</small></td>
+            <td>${hp.neededQty} ${hp.unit}</td>
+            <td><strong>${hp.harvestQty} ${hp.unit}</strong></td>
+            <td>${formatDate(hp.date)}</td>
+            <td>${hp.responsible}</td>
+            <td>${harvestStatusLabel(hp.status)}</td>
+          </tr>`
+      )
+      .join('');
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
+      <title>Ordem de Colheita</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#111}
+        h1{font-size:18px;margin:0 0 2px}
+        p.sub{color:#555;font-size:12px;margin:0 0 16px}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        th,td{border:1px solid #ddd;padding:8px;text-align:left;vertical-align:top}
+        th{background:#ecfdf5;text-transform:uppercase;font-size:10px}
+        small{color:#666}
+        @media print{button{display:none}}
+      </style></head><body>
+      <h1>Ordem de Colheita</h1>
+      <p class="sub">Emitida em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${harvestPlans.length} ${harvestPlans.length === 1 ? 'item' : 'itens'}</p>
+      <table><thead><tr><th>Produto</th><th>Necessário</th><th>A Colher</th><th>Data</th><th>Responsável</th><th>Status</th></tr></thead>
+      <tbody>${rows}</tbody></table>
+      <script>window.onload=function(){window.print();}</script>
+      </body></html>`);
+    w.document.close();
+  };
 
   // Purchase modal state
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
@@ -291,7 +372,29 @@ export const PlanningView: React.FC = () => {
       {/* Tab 2: Planejamento de Colheita (PRD §13) */}
       {activeTab === 'harvest' && (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {harvestPlans.length > 0 && (
+              <>
+                <button
+                  onClick={copyHarvestList}
+                  className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Copy className="h-3.5 w-3.5" /> {copiedHarvest ? 'Copiado!' : 'Copiar'}
+                </button>
+                <button
+                  onClick={printHarvestList}
+                  className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <Printer className="h-3.5 w-3.5" /> Imprimir
+                </button>
+                <button
+                  onClick={sendHarvestWhatsapp}
+                  className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100 transition-colors"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+                </button>
+              </>
+            )}
             <button
               onClick={() => handleOpenHarvestModal()}
               className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-3.5 py-2 text-xs font-bold text-white shadow-xs"
