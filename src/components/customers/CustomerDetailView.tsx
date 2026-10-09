@@ -51,6 +51,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
   // Custom price modal
   const [isPriceModalOpen, setIsPriceModalOpen] = useState(false);
   const [priceProductId, setPriceProductId] = useState('');
+  const [priceSearch, setPriceSearch] = useState('');
   const [customPriceVal, setCustomPriceVal] = useState<number>(0);
 
   // Promotion modal
@@ -89,6 +90,7 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
     .reduce((acc, curr) => acc + curr.amount, 0);
 
   const handleOpenPriceModal = () => {
+    setPriceSearch('');
     if (products.length > 0) {
       setPriceProductId(products[0].id);
       setCustomPriceVal(products[0].defaultPrice * 0.95);
@@ -99,6 +101,12 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
   const handleSavePrice = (e: React.FormEvent) => {
     e.preventDefault();
     if (!priceProductId || customPriceVal <= 0) return;
+    const selected = products.find((p) => p.id === priceProductId);
+    const term = priceSearch.trim().toLowerCase();
+    if (term && selected && selected.name.toLowerCase() !== term) {
+      alert('Escolha um produto da lista de busca antes de salvar.');
+      return;
+    }
     setCustomerCustomPrice(customer.id, priceProductId, customPriceVal);
     setIsPriceModalOpen(false);
   };
@@ -623,21 +631,67 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
             <form onSubmit={handleSavePrice} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Produto</label>
-                <select
-                  value={priceProductId}
-                  onChange={(e) => {
-                    setPriceProductId(e.target.value);
-                    const prod = products.find((p) => p.id === e.target.value);
-                    if (prod) setCustomPriceVal(prod.defaultPrice * 0.95);
-                  }}
-                  className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900 font-medium"
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (Tabela padrão: {formatBRL(p.defaultPrice)}/{p.unit})
-                    </option>
-                  ))}
-                </select>
+                {(() => {
+                  const selected = products.find((p) => p.id === priceProductId);
+                  const term = priceSearch.trim().toLowerCase();
+                  // Se o termo casa exatamente com o produto selecionado, lista recolhida
+                  const matches = term
+                    ? products
+                        .filter((p) => p.name.toLowerCase().includes(term))
+                        .slice(0, 8)
+                    : [];
+                  const showList =
+                    term.length > 0 && !(selected && selected.name.toLowerCase() === term);
+                  return (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={
+                          showList || term === ''
+                            ? priceSearch
+                            : priceSearch // mantém o que está digitado; ao escolher, term == nome
+                        }
+                        onChange={(e) => setPriceSearch(e.target.value)}
+                        placeholder="Digite o nome do produto..."
+                        autoComplete="off"
+                        className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900 font-medium focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                      />
+                      {selected && !showList && (
+                        <p className="mt-1 text-[11px] text-gray-500">
+                          Selecionado: <b>{selected.name}</b> (Tabela padrão:{' '}
+                          {formatBRL(selected.defaultPrice)}/{selected.unit})
+                        </p>
+                      )}
+                      {showList && (
+                        <div className="absolute z-10 mt-1 w-full max-h-52 overflow-y-auto rounded-xl border border-gray-200 bg-white shadow-lg">
+                          {matches.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-gray-500">
+                              Nenhum produto encontrado.
+                            </p>
+                          ) : (
+                            matches.map((p) => (
+                              <button
+                                key={p.id}
+                                type="button"
+                                onClick={() => {
+                                  setPriceProductId(p.id);
+                                  setCustomPriceVal(p.defaultPrice * 0.95);
+                                  setPriceSearch(p.name);
+                                }}
+                                className="flex w-full items-center justify-between px-3 py-2 text-left text-xs hover:bg-emerald-50"
+                              >
+                                <span className="font-bold text-gray-900">{p.name}</span>
+                                <span className="text-gray-500">
+                                  {formatBRL(p.defaultPrice)}/{p.unit}
+                                </span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
 
               <div>
