@@ -781,26 +781,25 @@ ${JSON.stringify(systemContext || {}, null, 2)}
               .sort((a, b) => b.name.length - a.name.length)[0];
             if (cust) {
               const items = products
-                .map((p: any) => ({ productId: p.productId, name: String(p.name), n: norm(p.name) }))
-                .filter((p) => {
-                  if (!p.n) return false;
+                .map((p: any) => {
+                  const n = norm(p.name);
+                  if (!n) return null;
                   // casa pelo nome completo ou pela primeira palavra (ex.: "TOMATE ITALIANO" quando a frase diz "tomate")
-                  const first = p.n.split(' ')[0];
-                  return qNorm.includes(p.n) || (first.length >= 4 && qNorm.includes(first));
-                })
-                .map((p) => {
-                  const idx = qNorm.indexOf(p.n);
+                  const first = n.split(' ')[0];
+                  const matchText = qNorm.includes(n) ? n : first.length >= 4 && qNorm.includes(first) ? first : null;
+                  if (!matchText) return null;
+                  const idx = qNorm.indexOf(matchText);
                   const before = qNorm.slice(Math.max(0, idx - 30), idx);
                   // ignora número que seja preço do item anterior ("... a 80,00")
                   const beforeClean = before.replace(/(?:\ba\b|\bpor\b|@)\s*r?\$?\s*\d{1,4}(?:[.,]\d{1,2})?\s*$/, ' ');
                   const nums = beforeClean.match(/(\d+(?:[.,]\d+)?)/g) || [];
                   const qty = nums.length ? Number(nums[nums.length - 1].replace(',', '.')) : 0;
-                  const after = qNorm.slice(idx + p.n.length, idx + p.n.length + 18);
+                  const after = qNorm.slice(idx + matchText.length, idx + matchText.length + 18);
                   const priceM = after.match(/(?:\ba\b|\bpor\b|@)\s*r?\$?\s*(\d{1,4}(?:[.,]\d{1,2})?)/);
                   const unitPrice = priceM ? Number(priceM[1].replace(',', '.')) : undefined;
                   return { productId: p.productId, quantity: qty, unitPrice };
                 })
-                .filter((it) => it.quantity > 0);
+                .filter((it: any) => it && it.quantity > 0);
               if (items.length > 0) {
                 let deliveryDate = todayStr;
                 const base = new Date(todayStr + 'T12:00:00');
