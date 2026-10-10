@@ -839,7 +839,6 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                         )}
                       </div>
                       <h3 className="mt-1.5 text-sm font-bold leading-tight text-gray-900">{p.name}</h3>
-                      <p className="text-[11px] text-gray-400">{p.origin}</p>
                       <div className="mt-2">
                         {noPrice ? (
                           <span className="rounded-md bg-gray-100 px-2 py-1 text-[11px] font-bold text-gray-500">
