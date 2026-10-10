@@ -513,15 +513,22 @@ export const AIAssistantDrawer: React.FC = () => {
                 e.preventDefault();
                 handleSendMessage();
               }}
-              className="flex items-center gap-2"
+              className="flex items-end gap-2"
             >
-              <input
-                type="text"
+              <textarea
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  // Enter envia; Shift+Enter pula linha
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (inputMessage.trim() && !isLoading) handleSendMessage();
+                  }
+                }}
+                rows={1}
                 placeholder="Pergunte ao Assistente (ex: quem está devendo?)..."
                 disabled={isLoading}
-                className="flex-1 rounded-xl border border-gray-300 px-3.5 py-2.5 text-xs text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+                className="max-h-32 min-h-[42px] flex-1 resize-none rounded-xl border border-gray-300 px-3.5 py-2.5 text-xs leading-relaxed text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
               />
               <button
                 type="submit"
@@ -531,6 +538,7 @@ export const AIAssistantDrawer: React.FC = () => {
                 <Send className="h-4 w-4" />
               </button>
             </form>
+            <p className="mt-1 text-[9px] text-gray-400">Enter envia · Shift+Enter pula linha</p>
           </div>
         </div>
       )}
