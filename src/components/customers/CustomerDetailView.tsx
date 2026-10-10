@@ -15,9 +15,11 @@ import {
   Calendar,
   CheckCircle,
   X,
+  Pencil,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatDate, getFinancialStatusBadge, getOrderStatusBadge } from '../../utils/formatters';
+import type { Customer } from '../../types';
 
 interface CustomerDetailViewProps {
   customerId: string;
@@ -43,7 +45,12 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
     createPromotion,
     togglePromotionActive,
     getCustomerCrateBalance,
+    updateCustomer,
   } = useApp();
+
+  // Modal de edição do cliente
+  const [isEditOpen, setIsEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState<Customer | null>(null);
 
   const [activeTab, setActiveTab] = useState<
     'summary' | 'orders' | 'finance' | 'prices' | 'promotions' | 'crates'
@@ -126,6 +133,22 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
     setIsPriceModalOpen(false);
   };
 
+  const handleOpenEdit = () => {
+    setEditForm({ ...customer });
+    setIsEditOpen(true);
+  };
+
+  const handleSaveEdit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editForm) return;
+    if (!editForm.name.trim()) {
+      alert('O nome do cliente é obrigatório.');
+      return;
+    }
+    updateCustomer(editForm);
+    setIsEditOpen(false);
+  };
+
   const handleOpenPromoModal = () => {
     const today = new Date().toISOString().split('T')[0];
     const next10Days = new Date();
@@ -189,6 +212,13 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            onClick={handleOpenEdit}
+            className="flex items-center gap-1.5 rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-100 shadow-2xs"
+          >
+            <Pencil className="h-4 w-4" />
+            <span>Editar</span>
+          </button>
           {customer.whatsapp && (
             <a
               href={`https://wa.me/55${customer.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Olá! Contato da distribuidora HortiGestão com o cliente ${customer.name}.`)}`}
@@ -822,6 +852,225 @@ export const CustomerDetailView: React.FC<CustomerDetailViewProps> = ({
                   className="rounded-xl bg-purple-600 hover:bg-purple-700 px-4 py-2 text-xs font-bold text-white"
                 >
                   Ativar Promoção
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal: Editar Cliente */}
+      {isEditOpen && editForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-gray-200 bg-white p-6 shadow-2xl">
+            <h3 className="font-bold text-sm text-gray-900 mb-1">Editar Cliente</h3>
+            <p className="text-xs text-gray-500 mb-4">{customer.name}</p>
+
+            <form onSubmit={handleSaveEdit} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Nome / Razão Social *</label>
+                  <input
+                    type="text"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Nome Fantasia</label>
+                  <input
+                    type="text"
+                    value={editForm.tradeName || ''}
+                    onChange={(e) => setEditForm({ ...editForm, tradeName: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">CPF / CNPJ</label>
+                  <input
+                    type="text"
+                    value={editForm.document}
+                    onChange={(e) => setEditForm({ ...editForm, document: e.target.value })}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Telefone</label>
+                  <input
+                    type="tel"
+                    value={editForm.phone}
+                    onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                    placeholder="(47) 99999-0000"
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">WhatsApp (com DDD)</label>
+                  <input
+                    type="tel"
+                    value={editForm.whatsapp}
+                    onChange={(e) => setEditForm({ ...editForm, whatsapp: e.target.value })}
+                    placeholder="47999990000"
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  />
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                <p className="text-xs font-bold text-gray-900 mb-2">Endereço de Entrega</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Rua</label>
+                    <input
+                      type="text"
+                      value={editForm.address.street}
+                      onChange={(e) => setEditForm({ ...editForm, address: { ...editForm.address, street: e.target.value } })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Número</label>
+                    <input
+                      type="text"
+                      value={editForm.address.number}
+                      onChange={(e) => setEditForm({ ...editForm, address: { ...editForm.address, number: e.target.value } })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Bairro</label>
+                    <input
+                      type="text"
+                      value={editForm.address.neighborhood}
+                      onChange={(e) => setEditForm({ ...editForm, address: { ...editForm.address, neighborhood: e.target.value } })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Cidade</label>
+                    <input
+                      type="text"
+                      value={editForm.address.city}
+                      onChange={(e) => setEditForm({ ...editForm, address: { ...editForm.address, city: e.target.value } })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">UF</label>
+                    <input
+                      type="text"
+                      maxLength={2}
+                      value={editForm.address.state}
+                      onChange={(e) => setEditForm({ ...editForm, address: { ...editForm.address, state: e.target.value.toUpperCase() } })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">CEP</label>
+                    <input
+                      type="text"
+                      value={editForm.address.zipCode}
+                      onChange={(e) => setEditForm({ ...editForm, address: { ...editForm.address, zipCode: e.target.value } })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-4">
+                    <label className="block text-[10px] font-bold uppercase text-gray-500 mb-1">Ponto de Referência</label>
+                    <input
+                      type="text"
+                      value={editForm.address.reference || ''}
+                      onChange={(e) => setEditForm({ ...editForm, address: { ...editForm.address, reference: e.target.value } })}
+                      className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Forma de Pagamento</label>
+                  <select
+                    value={editForm.paymentMethod}
+                    onChange={(e) => setEditForm({ ...editForm, paymentMethod: e.target.value as Customer['paymentMethod'] })}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  >
+                    <option value="pix">PIX</option>
+                    <option value="cash">À Vista</option>
+                    <option value="credit">A Prazo</option>
+                    <option value="boleto">Boleto</option>
+                    <option value="transfer">Transferência</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Prazo</label>
+                  <select
+                    value={editForm.paymentTerm}
+                    onChange={(e) => setEditForm({ ...editForm, paymentTerm: e.target.value as Customer['paymentTerm'] })}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  >
+                    <option value="sight">À Vista</option>
+                    <option value="7d">7 Dias</option>
+                    <option value="15d">15 Dias</option>
+                    <option value="30d">30 Dias</option>
+                    <option value="weekly">Semanal</option>
+                    <option value="biweekly">Quinzenal</option>
+                    <option value="monthly">Mensal</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Limite de Crédito (R$)</label>
+                  <PriceInput
+                    value={editForm.creditLimit}
+                    onValueChange={(v) => setEditForm({ ...editForm, creditLimit: v })}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs font-bold text-gray-900"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Condição Comercial</label>
+                  <input
+                    type="text"
+                    value={editForm.commercialCondition}
+                    onChange={(e) => setEditForm({ ...editForm, commercialCondition: e.target.value })}
+                    placeholder="Ex: Tabela Atacado"
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Situação</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value as Customer['status'] })}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  >
+                    <option value="active">Ativo</option>
+                    <option value="inactive">Inativo</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-3">
+                  <label className="block text-xs font-bold text-gray-700 mb-1">Observações</label>
+                  <textarea
+                    value={editForm.notes || ''}
+                    onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                    rows={2}
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsEditOpen(false)}
+                  className="rounded-xl border border-gray-300 px-4 py-2 text-xs font-bold text-gray-700"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2 text-xs font-bold text-white"
+                >
+                  Salvar Alterações
                 </button>
               </div>
             </form>

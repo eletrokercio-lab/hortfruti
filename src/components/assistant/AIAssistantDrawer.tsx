@@ -525,10 +525,10 @@ export const AIAssistantDrawer: React.FC = () => {
                     if (inputMessage.trim() && !isLoading) handleSendMessage();
                   }
                 }}
-                rows={1}
+                rows={3}
                 placeholder="Pergunte ao Assistente (ex: quem está devendo?)..."
                 disabled={isLoading}
-                className="max-h-32 min-h-[42px] flex-1 resize-none rounded-xl border border-gray-300 px-3.5 py-2.5 text-xs leading-relaxed text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+                className="max-h-56 min-h-[84px] flex-1 resize-none rounded-xl border border-gray-300 px-3.5 py-2.5 text-xs leading-relaxed text-gray-900 placeholder:text-gray-400 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
               />
               <button
                 type="submit"
