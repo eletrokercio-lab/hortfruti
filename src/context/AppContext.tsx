@@ -585,26 +585,36 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Process items with customer-specific pricing & active promotions
     let subtotal = 0;
-    const orderItems: OrderItem[] = orderData.items.map((item) => {
-      const product = products.find((p) => p.id === item.productId);
-      const priceInfo = getProductPriceForCustomer(item.productId, customer.id);
-      // unitPrice explícito (ex.: pedido lançado pela IA com preço citado) tem prioridade
-      const hasExplicitPrice = item.unitPrice != null && Number(item.unitPrice) > 0;
-      const unitPrice = hasExplicitPrice ? Number(item.unitPrice) : priceInfo.price;
-      const lineSubtotal = item.quantity * unitPrice;
-      subtotal += lineSubtotal;
+    const orderItems: OrderItem[] = orderData.items
+      .map((item) => {
+        const product = products.find((p) => p.id === item.productId);
+        const priceInfo = getProductPriceForCustomer(item.productId, customer.id);
+        // unitPrice explícito (ex.: pedido lançado pela IA com preço citado) tem prioridade
+        const hasExplicitPrice = item.unitPrice != null && Number(item.unitPrice) > 0;
+        const unitPrice = hasExplicitPrice ? Number(item.unitPrice) : priceInfo.price;
+        // Item sem preço (produto zerado na tabela) NÃO entra no pedido — evita venda a R$ 0,00
+        if (unitPrice <= 0) return null;
+        const lineSubtotal = item.quantity * unitPrice;
+        subtotal += lineSubtotal;
 
-      return {
-        productId: item.productId,
-        productName: product ? product.name : 'Produto Desconhecido',
-        unit: product ? product.unit : 'cx',
-        quantity: item.quantity,
-        unitPrice,
-        originalPrice: hasExplicitPrice ? unitPrice : priceInfo.originalPrice,
-        isPromo: hasExplicitPrice ? false : priceInfo.isPromo,
-        subtotal: lineSubtotal,
-      };
-    });
+        return {
+          productId: item.productId,
+          productName: product ? product.name : 'Produto Desconhecido',
+          unit: product ? product.unit : 'cx',
+          quantity: item.quantity,
+          unitPrice,
+          originalPrice: hasExplicitPrice ? unitPrice : priceInfo.originalPrice,
+          isPromo: hasExplicitPrice ? false : priceInfo.isPromo,
+          subtotal: lineSubtotal,
+        } as OrderItem;
+      })
+      .filter((it): it is OrderItem => it !== null);
+
+    if (orderItems.length === 0) {
+      throw new Error(
+        'Nenhum item com preço: os produtos citados estão sem preço na tabela. Defina o preço antes de lançar o pedido.'
+      );
+    }
 
     const total = subtotal;
 
@@ -1625,14 +1635,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               it.productId && it.quantity > 0 && products.some((p) => p.id === it.productId)
           );
         if (customer && validItems.length > 0) {
-          createOrder({
-            customerId: customer.id,
-            deliveryDate: data.deliveryDate || today,
-            items: validItems,
-            notes: data.notes,
-            paymentMethod: validMethods.includes(data.paymentMethod) ? data.paymentMethod : undefined,
-            paymentTerm: validTerms.includes(data.paymentTerm) ? data.paymentTerm : undefined,
-          });
+          try {
+            createOrder({
+              customerId: customer.id,
+              deliveryDate: data.deliveryDate || today,
+              items: validItems,
+              notes: data.notes,
+              paymentMethod: validMethods.includes(data.paymentMethod) ? data.paymentMethod : undefined,
+              paymentTerm: validTerms.includes(data.paymentTerm) ? data.paymentTerm : undefined,
+            });
+          } catch (err) {
+            alert(err instanceof Error ? err.message : 'Não foi possível criar o pedido.');
+          }
+        } else if (customer && validItems.length === 0) {
+          alert('Nenhum item válido: confira os nomes dos produtos e as quantidades.');
         }
         setCurrentTab('orders');
         break;
