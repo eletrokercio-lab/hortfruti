@@ -10,10 +10,14 @@ import {
   Clock,
   Send,
   History,
+  Pencil,
+  RotateCcw,
+  UserCog,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatUnit } from '../../utils/formatters';
 import { PaymentMethod, PaymentTerm } from '../../types';
+import { PriceInput } from '../ui/PriceInput';
 
 interface NewOrderModalProps {
   isOpen: boolean;
@@ -32,6 +36,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     orders,
     createOrder,
     getProductPriceForCustomer,
+    setCustomerCustomPrice,
   } = useApp();
 
   const [customerId, setCustomerId] = useState<string>('');
@@ -40,10 +45,14 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [paymentTerm, setPaymentTerm] = useState<PaymentTerm>('7d');
 
-  // Items list
+  // Items list (unitPriceOverride = preço ajustado só para este pedido)
   const [items, setItems] = useState<
-    { productId: string; quantity: number }[]
+    { productId: string; quantity: number; unitPriceOverride?: number }[]
   >([]);
+
+  // Editor de preço individual da linha
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editPrice, setEditPrice] = useState<number>(0);
 
   // Natural Language AI input field
   const [aiInputText, setAiInputText] = useState('');
@@ -181,12 +190,60 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const handleUpdateItemProduct = (index: number, newProductId: string) => {
     const updated = [...items];
     updated[index].productId = newProductId;
+    // Produto trocado invalida ajuste de preço da linha
+    delete updated[index].unitPriceOverride;
     setItems(updated);
   };
 
   const handleUpdateItemQty = (index: number, qty: number) => {
     const updated = [...items];
     updated[index].quantity = Math.max(1, qty);
+    setItems(updated);
+  };
+
+  const openPriceEditor = (idx: number) => {
+    const it = items[idx];
+    const current =
+      it.unitPriceOverride != null
+        ? it.unitPriceOverride
+        : customerId
+          ? getProductPriceForCustomer(it.productId, customerId).price
+          : products.find((p) => p.id === it.productId)?.defaultPrice || 0;
+    setEditingIdx(idx);
+    setEditPrice(current > 0 ? current : 0);
+  };
+
+  const closePriceEditor = () => {
+    setEditingIdx(null);
+    setEditPrice(0);
+  };
+
+  // Salva como preço exclusivo do cliente (vale para este e os próximos pedidos)
+  const handleSaveCustomerPrice = () => {
+    const idx = editingIdx;
+    if (idx == null || !customerId || editPrice <= 0) return;
+    setCustomerCustomPrice(customerId, items[idx].productId, editPrice);
+    // O cálculo normal já passa a usar o preço exclusivo — limpa o override
+    const updated = [...items];
+    delete updated[idx].unitPriceOverride;
+    setItems(updated);
+    closePriceEditor();
+  };
+
+  // Usa o valor ajustado apenas neste pedido
+  const handleSaveOrderOnlyPrice = () => {
+    const idx = editingIdx;
+    if (idx == null || editPrice <= 0) return;
+    const updated = [...items];
+    updated[idx].unitPriceOverride = editPrice;
+    setItems(updated);
+    closePriceEditor();
+  };
+
+  // Volta ao preço da tabela/promoção (remove ajuste só-no-pedido)
+  const handleResetPrice = (idx: number) => {
+    const updated = [...items];
+    delete updated[idx].unitPriceOverride;
     setItems(updated);
   };
 
@@ -199,15 +256,18 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     const priceInfo = customerId
       ? getProductPriceForCustomer(it.productId, customerId)
       : { price: product?.defaultPrice || 0, originalPrice: product?.defaultPrice || 0, isPromo: false };
-    const lineTotal = it.quantity * priceInfo.price;
+    const hasOverride = it.unitPriceOverride != null && it.unitPriceOverride > 0;
+    const price = hasOverride ? (it.unitPriceOverride as number) : priceInfo.price;
+    const lineTotal = it.quantity * price;
     totalOrder += lineTotal;
 
     return {
       product,
       quantity: it.quantity,
-      price: priceInfo.price,
-      originalPrice: priceInfo.originalPrice,
+      price,
+      originalPrice: hasOverride ? priceInfo.price : priceInfo.originalPrice,
       isPromo: priceInfo.isPromo,
+      hasOverride,
       lineTotal,
     };
   });
@@ -220,7 +280,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     createOrder({
       customerId,
       deliveryDate,
-      items,
+      items: items.map((it) => ({
+        productId: it.productId,
+        quantity: it.quantity,
+        ...(it.unitPriceOverride != null && it.unitPriceOverride > 0
+          ? { unitPrice: it.unitPriceOverride }
+          : {}),
+      })),
       notes,
       paymentMethod,
       paymentTerm,
@@ -415,36 +481,107 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between sm:justify-end gap-4 min-w-[200px]">
-                    <div className="text-right">
-                      <div className="flex items-center gap-1 justify-end">
-                        {row.isPromo && (
-                          <span className="rounded bg-rose-100 px-1 text-[9px] font-bold text-rose-800">
-                            PROMOÇÃO
-                          </span>
-                        )}
-                        {row.price !== row.originalPrice && !row.isPromo && (
-                          <span className="rounded bg-blue-100 px-1 text-[9px] font-bold text-blue-800">
-                            PREÇO CLIENTE
-                          </span>
-                        )}
-                        <span className="text-xs font-semibold text-gray-800">
-                          {formatBRL(row.price)}
-                        </span>
+                    {editingIdx === idx ? (
+                      // Editor de preço individual inline
+                      <div className="w-full rounded-xl border border-emerald-300 bg-emerald-50/60 p-2.5">
+                        <p className="mb-1 text-[10px] font-bold uppercase text-emerald-800">
+                          Preço individual — {row.product?.name}
+                        </p>
+                        <PriceInput
+                          key={`price-edit-${editingIdx}`}
+                          value={editPrice}
+                          onValueChange={setEditPrice}
+                          className="w-full rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-bold text-gray-900"
+                          autoFocus
+                        />
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={handleSaveCustomerPrice}
+                            disabled={editPrice <= 0}
+                            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700 disabled:opacity-40"
+                            title="Vale para este e todos os próximos pedidos deste cliente"
+                          >
+                            <UserCog className="h-3 w-3" />
+                            Preço do cliente
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveOrderOnlyPrice}
+                            disabled={editPrice <= 0}
+                            className="rounded-lg border border-emerald-600 bg-white px-2.5 py-1.5 text-[10px] font-bold text-emerald-700 hover:bg-emerald-50 disabled:opacity-40"
+                            title="Usa este valor apenas neste pedido"
+                          >
+                            Só neste pedido
+                          </button>
+                          <button
+                            type="button"
+                            onClick={closePriceEditor}
+                            className="ml-auto text-[10px] font-semibold text-gray-400 hover:text-gray-600"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
                       </div>
-                      <p className="text-xs font-bold text-emerald-700">
-                        = {formatBRL(row.lineTotal)}
-                      </p>
-                    </div>
+                    ) : (
+                      <>
+                        <div className="text-right">
+                          <div className="flex items-center gap-1 justify-end">
+                            {row.isPromo && (
+                              <span className="rounded bg-rose-100 px-1 text-[9px] font-bold text-rose-800">
+                                PROMOÇÃO
+                              </span>
+                            )}
+                            {row.hasOverride ? (
+                              <span className="rounded bg-amber-100 px-1 text-[9px] font-bold text-amber-800">
+                                AJUSTADO
+                              </span>
+                            ) : (
+                              row.price !== row.originalPrice &&
+                              !row.isPromo && (
+                                <span className="rounded bg-blue-100 px-1 text-[9px] font-bold text-blue-800">
+                                  PREÇO CLIENTE
+                                </span>
+                              )
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => openPriceEditor(idx)}
+                              className="group flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-emerald-50"
+                              title="Definir preço individual para este cliente"
+                            >
+                              <span className="text-xs font-semibold text-gray-800 group-hover:text-emerald-700">
+                                {formatBRL(row.price)}
+                              </span>
+                              <Pencil className="h-3 w-3 text-gray-300 group-hover:text-emerald-600" />
+                            </button>
+                            {row.hasOverride && (
+                              <button
+                                type="button"
+                                onClick={() => handleResetPrice(idx)}
+                                className="rounded p-0.5 text-gray-300 hover:text-amber-700"
+                                title="Voltar ao preço da tabela"
+                              >
+                                <RotateCcw className="h-3 w-3" />
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-xs font-bold text-emerald-700">
+                            = {formatBRL(row.lineTotal)}
+                          </p>
+                        </div>
 
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveItem(idx)}
-                      disabled={items.length <= 1}
-                      className="rounded-lg p-1.5 text-gray-400 hover:text-rose-600 disabled:opacity-30"
-                      title="Remover Item"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveItem(idx)}
+                          disabled={items.length <= 1}
+                          className="rounded-lg p-1.5 text-gray-400 hover:text-rose-600 disabled:opacity-30"
+                          title="Remover Item"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
               ))}
