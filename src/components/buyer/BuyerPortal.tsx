@@ -457,6 +457,18 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
     });
   };
 
+  // Define a quantidade digitada direto (agilidade: sem clicar várias vezes)
+  const setCartQty = (productId: string, qty: number) => {
+    const prod = products.find((p) => p.id === productId);
+    if (prod && getPrice(prod).price <= 0 && qty > 0) return;
+    setCart((prev) => {
+      const next = { ...prev };
+      if (qty <= 0) delete next[productId];
+      else next[productId] = qty;
+      return next;
+    });
+  };
+
   // Repetir pedido: carrega os itens de um pedido anterior no carrinho
   // (preços são recalculados com a tabela/promoção atual do cliente)
   const handleRepeatOrder = (orderId: string) => {
@@ -876,9 +888,15 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                           <button onClick={() => addToCart(p.id, -1)} className="rounded p-1 text-emerald-700 hover:bg-emerald-100">
                             <Minus className="h-4 w-4" />
                           </button>
-                          <span className="text-sm font-black text-emerald-800">
-                            {qty} {p.unit}
-                          </span>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={qty}
+                            onChange={(e) => setCartQty(p.id, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)}
+                            className="w-9 bg-transparent text-center text-sm font-black text-emerald-800 focus:outline-none"
+                            title="Digite a quantidade"
+                          />
+                          <span className="text-[10px] font-bold text-emerald-700">{p.unit}</span>
                           <button onClick={() => addToCart(p.id, 1)} className="rounded p-1 text-emerald-700 hover:bg-emerald-100">
                             <Plus className="h-4 w-4" />
                           </button>
@@ -1156,6 +1174,15 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                     <button onClick={() => addToCart(c.product.id, -1)} className="rounded bg-gray-100 p-1 text-gray-600 hover:bg-gray-200">
                       <Minus className="h-3.5 w-3.5" />
                     </button>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={c.qty}
+                      onChange={(e) => setCartQty(c.product.id, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)}
+                      className="w-10 rounded border border-gray-200 bg-white text-center text-sm font-black text-gray-900 focus:border-emerald-500 focus:outline-none"
+                      title="Digite a quantidade"
+                    />
+                    <span className="text-[10px] font-bold text-gray-500">{c.product.unit}</span>
                     <button onClick={() => addToCart(c.product.id, 1)} className="rounded bg-gray-100 p-1 text-gray-600 hover:bg-gray-200">
                       <Plus className="h-3.5 w-3.5" />
                     </button>
