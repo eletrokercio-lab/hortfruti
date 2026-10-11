@@ -12,7 +12,6 @@ export const LoginScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
 
   const [fullName, setFullName] = useState('');
-  const [company, setCompany] = useState('');
   const [phone, setPhone] = useState('');
 
   const [error, setError] = useState('');
@@ -33,16 +32,24 @@ export const LoginScreen: React.FC = () => {
     e.preventDefault();
     setError('');
     setInfo('');
-    if (!fullName || !company || !email || password.length < 6) {
-      setError('Preencha todos os campos. A senha precisa de no mínimo 6 caracteres.');
+    if (!fullName || password.length < 6) {
+      setError('Preencha nome e senha. A senha precisa de no mínimo 6 caracteres.');
+      return;
+    }
+    const digits = phone.replace(/\D/g, '');
+    if (digits.length < 10 || digits.length > 13) {
+      setError('Informe o telefone com DDD (ex.: 47 99999-0000).');
       return;
     }
     setBusy(true);
-    const res = await signUpComprador({ email, password, fullName, company, phone });
+    const res = await signUpComprador({ name: fullName, phone, password });
     if (res.error) {
       setError(res.error);
     } else if (res.needsEmailConfirm) {
-      setInfo('Conta criada! Confirme seu e-mail na caixa de entrada e faça login.');
+      setInfo('Conta criada! Se o login não funcionar de primeira, chame o suporte para ativar.');
+      setMode('login');
+    } else {
+      setInfo('Conta criada! Faça login com seu telefone e senha.');
       setMode('login');
     }
     setBusy(false);
@@ -142,17 +149,17 @@ export const LoginScreen: React.FC = () => {
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Entrar no sistema</h2>
-                <p className="text-xs text-gray-500">Use o e-mail e a senha da sua conta.</p>
+                <p className="text-xs text-gray-500">Comprador: telefone com DDD e senha. Equipe: e-mail e senha.</p>
               </div>
 
               <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder="seu@email.com"
+                  placeholder="Telefone (47 99999-0000) ou e-mail"
                   className={inputClass}
                 />
               </div>
@@ -219,20 +226,12 @@ export const LoginScreen: React.FC = () => {
               </div>
 
               <div className="relative">
-                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Seu nome completo" className={inputClass} />
-              </div>
-              <div className="relative">
                 <Building2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input value={company} onChange={(e) => setCompany(e.target.value)} placeholder="Nome da empresa / mercado" className={inputClass} />
+                <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nome do mercado ou empresa" className={inputClass} />
               </div>
               <div className="relative">
                 <Phone className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="WhatsApp / Telefone" className={inputClass} />
-              </div>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="E-mail" className={inputClass} />
+                <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone com DDD (47 99999-0000)" className={inputClass} />
               </div>
               <div className="relative">
                 <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -264,7 +263,10 @@ export const LoginScreen: React.FC = () => {
             <form onSubmit={handleReset} className="space-y-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Recuperar senha</h2>
-                <p className="text-xs text-gray-500">Enviaremos um link de recuperação para seu e-mail.</p>
+                <p className="text-xs text-gray-500">
+                  Enviaremos um link de recuperação para seu e-mail (equipe). Comprador que entrou por
+                  telefone: fale com o suporte para redefinir a senha.
+                </p>
               </div>
               <div className="relative">
                 <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

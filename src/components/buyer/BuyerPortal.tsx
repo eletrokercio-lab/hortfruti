@@ -411,9 +411,11 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       products.filter(
         (p) =>
           (category === 'todos' || p.category === category) &&
-          p.name.toLowerCase().includes(search.toLowerCase())
+          p.name.toLowerCase().includes(search.toLowerCase()) &&
+          // Só aparece no catálogo quem tem preço (promoção, especial do cliente ou tabela base)
+          getPrice(p).price > 0
       ),
-    [products, category, search]
+    [products, category, search, getPrice]
   );
 
   const cartItems = useMemo(() => {
