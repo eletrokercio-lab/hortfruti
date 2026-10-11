@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { playNotificationSound, isSelfNotification, markNotificationSeen } from '../utils/notify';
 import { formatBRL } from '../utils/formatters';
 import {
@@ -168,6 +168,7 @@ interface AppContextType {
   reopenMonthPeriod: (month: string) => void;
 
   markNotificationAsRead: (id: string) => void;
+  dismissNotification: (id: string) => void;
   clearAllNotifications: () => void;
 
   logAIAudit: (entry: Omit<AIAuditLog, 'id' | 'timestamp'>) => AIAuditLog;
@@ -283,6 +284,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return saved ? JSON.parse(saved) : INITIAL_NOTIFICATIONS;
   });
 
+  // Notificações dispensadas nesta sessão (lidas/resolvidas) — não voltam no pull remoto
+  const dismissedNotifIds = useRef<Set<string>>(new Set());
+  // Pedidos cujas notificações já foram limpas por estarem resolvidos (entregue/cancelado)
+  const resolvedNotifOrders = useRef<Set<string>>(new Set());
+
   const [aiLogs, setAiLogs] = useState<AIAuditLog[]>(() => {
     const saved = localStorage.getItem('hg_ai_logs');
     return saved ? JSON.parse(saved) : INITIAL_AI_LOGS;
@@ -349,21 +355,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       for (const n of remoteNotifs) seenIds.add(n.id);
       setNotifications((prev) => {
         const remoteIds = new Set(remoteNotifs.map((n) => n.id));
-        const locals = prev.filter((n) => !remoteIds.has(n.id));
-        const remoteItems: NotificationItem[] = remoteNotifs.map((rn) => ({
-          id: rn.id,
-          type: rn.type as NotificationItem['type'],
-          title: rn.title,
-          message: rn.message,
-          date: new Date(rn.created_at).toLocaleString('pt-BR', {
-            day: '2-digit',
-            month: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
-          read: rn.read,
-          actionTab: rn.action_tab || undefined,
-        }));
+        const locals = prev.filter(
+          (n) => !remoteIds.has(n.id) && !dismissedNotifIds.current.has(n.id)
+        );
+        const remoteItems: NotificationItem[] = remoteNotifs
+          .filter((rn) => !dismissedNotifIds.current.has(rn.id))
+          .map((rn) => ({
+            id: rn.id,
+            type: rn.type as NotificationItem['type'],
+            title: rn.title,
+            message: rn.message,
+            date: new Date(rn.created_at).toLocaleString('pt-BR', {
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            }),
+            read: rn.read,
+            actionTab: rn.action_tab || undefined,
+          }));
         return [...remoteItems, ...locals];
       });
     };
@@ -1506,9 +1516,47 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })();
   };
 
-  const clearAllNotifications = () => {
-    setNotifications([]);
+  // Lida = some: ao clicar na notificação, ela sai da lista (e do banco)
+  const dismissNotification = (id: string) => {
+    dismissedNotifIds.current.add(id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.deleteNotification(id);
+    })();
   };
+
+  const clearAllNotifications = () => {
+    const ids = notifications.map((n) => n.id);
+    for (const id of ids) dismissedNotifIds.current.add(id);
+    setNotifications([]);
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      for (const id of ids) await liveSync.deleteNotification(id);
+    })();
+  };
+
+  // Notificações de pedidos resolvidos (entregue/cancelado) saem do sininho sozinhas
+  useEffect(() => {
+    const resolved = orders.filter(
+      (o) =>
+        (o.status === 'entregue' || o.status === 'cancelado') &&
+        o.orderNumber &&
+        !resolvedNotifOrders.current.has(o.id)
+    );
+    if (resolved.length === 0) return;
+    for (const o of resolved) resolvedNotifOrders.current.add(o.id);
+    const numbers = resolved.map((o) => o.orderNumber);
+    setNotifications((prev) =>
+      prev.filter((n) => !numbers.some((num) => num && n.message?.includes(num)))
+    );
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      for (const num of numbers) {
+        if (num) await liveSync.deleteNotificationsLike(num);
+      }
+    })();
+  }, [orders]);
 
   const logAIAudit = (entry: Omit<AIAuditLog, 'id' | 'timestamp'>): AIAuditLog => {
     const newLog: AIAuditLog = {
@@ -1753,6 +1801,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reopenMonthPeriod,
 
         markNotificationAsRead,
+        dismissNotification,
         clearAllNotifications,
 
         logAIAudit,

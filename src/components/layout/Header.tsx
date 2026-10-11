@@ -22,7 +22,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
   const {
     setIsAssistantOpen,
     notifications,
-    markNotificationAsRead,
+    dismissNotification,
     clearAllNotifications,
     setCurrentTab,
   } = useApp();
@@ -123,9 +123,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
           {showNotifications && (
             <div className="absolute right-0 mt-2 w-80 md:w-96 rounded-xl border border-gray-200 bg-white p-2 shadow-xl z-50 animate-in fade-in zoom-in-95 duration-100">
               <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2">
-                <span className="font-semibold text-sm text-gray-800">
-                  Notificações ({unreadNotifications.length} novas)
-                </span>
+                <div>
+                  <span className="font-semibold text-sm text-gray-800">
+                    Notificações ({unreadNotifications.length} novas)
+                  </span>
+                  <p className="text-[10px] text-gray-400">Clique em uma notificação para resolvê-la e removê-la</p>
+                </div>
                 {notifications.length > 0 && (
                   <button
                     onClick={() => clearAllNotifications()}
@@ -144,7 +147,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileMenu, onOpenSearch }
                     <div
                       key={notif.id}
                       onClick={() => {
-                        markNotificationAsRead(notif.id);
+                        // Lida = some da lista (e do banco)
+                        dismissNotification(notif.id);
                         if (notif.actionTab) setCurrentTab(notif.actionTab);
                         setShowNotifications(false);
                       }}

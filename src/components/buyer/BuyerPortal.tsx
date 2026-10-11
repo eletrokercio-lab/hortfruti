@@ -167,11 +167,12 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
 
   const unreadNotifs = notifs.filter((n) => !n.read).length;
 
-  const markNotifRead = async (id: string) => {
-    setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  // Lida = some: ao clicar, a notificação sai da lista (e do banco)
+  const dismissNotif = async (id: string) => {
+    setNotifs((prev) => prev.filter((n) => n.id !== id));
     try {
       const client = getSupabaseClient();
-      if (client) await client.from('notifications').update({ read: true }).eq('id', id);
+      if (client) await client.from('notifications').delete().eq('id', id);
     } catch {
       // silencioso
     }
@@ -729,7 +730,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                       notifs.map((n) => (
                         <button
                           key={n.id}
-                          onClick={() => { if (!n.read) markNotifRead(n.id); }}
+                          onClick={() => dismissNotif(n.id)}
                           className={`block w-full border-b border-gray-50 px-4 py-3 text-left transition-colors hover:bg-gray-50 ${
                             n.read ? 'opacity-60' : 'bg-emerald-50/50'
                           }`}

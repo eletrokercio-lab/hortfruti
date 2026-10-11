@@ -427,6 +427,33 @@ export const liveSync = {
     await client.from('notifications').update({ read: true }).eq('id', id);
   },
 
+  // Lida = some da lista: remove a notificação no Supabase (todos os aparelhos)
+  deleteNotification: async (id: string): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('notifications').delete().eq('id', id);
+    } catch {
+      // silencioso
+    }
+  },
+
+  // Notificações resolvidas: remove por texto (nº do pedido) só do público do painel,
+  // preservando os avisos do comprador (ex.: "seu pedido foi entregue")
+  deleteNotificationsLike: async (text: string): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client
+        .from('notifications')
+        .delete()
+        .eq('audience', 'operador')
+        .like('message', `*${text}*`);
+    } catch {
+      // silencioso
+    }
+  },
+
   // ----------------------------------------------------------
   // PUSH — cadastros do operador (clientes, produtos, preços, promoções, vasilhames)
   // ----------------------------------------------------------
