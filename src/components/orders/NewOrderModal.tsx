@@ -67,13 +67,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       setDeliveryDate(tomorrow.toISOString().split('T')[0]);
 
       if (customers.length > 0 && !customerId) {
-        setCustomerId(customers[0].id);
-        setPaymentMethod(customers[0].paymentMethod);
-        setPaymentTerm(customers[0].paymentTerm);
-      }
-
-      if (products.length > 0 && items.length === 0) {
-        setItems([{ productId: products[0].id, quantity: 10 }]);
+        // Pré-seleciona o primeiro cliente e já carrega os itens da última compra dele
+        handleCustomerChange(customers[0].id);
       }
 
       if (initialDraft) {
@@ -90,7 +85,49 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       setPaymentMethod(selected.paymentMethod);
       setPaymentTerm(selected.paymentTerm);
     }
+
+    // Facilita o dia a dia: cliente que já pediu entra com os itens e os
+    // preços da última compra já preenchidos (quando o rascunho está intocado)
+    const last = orders
+      .filter((o) => o.customerId === id && o.status !== 'cancelado')
+      .sort((a, b) => (a.date < b.date ? 1 : -1))[0];
+    const pristine =
+      items.length === 0 ||
+      (items.length === 1 &&
+        items[0].unitPriceOverride == null &&
+        products[0] != null &&
+        items[0].productId === products[0].id &&
+        items[0].quantity === 10);
+    if (last && last.items.length > 0 && pristine) {
+      setItems(buildItemsFromOrder(last, id));
+    } else if (items.length === 0 && products.length > 0) {
+      setItems([{ productId: products[0].id, quantity: 10 }]);
+    }
   };
+
+  // Itens do último pedido do cliente, com o preço pago da última vez
+  // (override quando o preço atual diverge do negociado naquela compra)
+  const buildItemsFromOrder = (
+    order: (typeof orders)[number],
+    custId: string
+  ): { productId: string; quantity: number; unitPriceOverride?: number }[] =>
+    order.items
+      .map((it) => {
+        const exists = products.some((p) => p.id === it.productId);
+        if (!exists) return null;
+        const current = getProductPriceForCustomer(it.productId, custId).price;
+        const lastPaid = Number(it.unitPrice) || 0;
+        const override =
+          lastPaid > 0 && Math.abs(current - lastPaid) > 0.005
+            ? { unitPriceOverride: lastPaid }
+            : {};
+        return {
+          productId: it.productId,
+          quantity: Math.max(1, Math.round(it.quantity)),
+          ...override,
+        };
+      })
+      .filter((x): x is { productId: string; quantity: number; unitPriceOverride?: number } => x !== null);
 
   const applyDraft = (draft: any) => {
     if (draft.customerId) {
@@ -173,12 +210,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
   const handleRepeatLastOrder = () => {
     if (!lastCustomerOrder) return;
-    const mapped = lastCustomerOrder.items
-      .map((it) => ({
-        productId: products.find((p) => p.id === it.productId)?.id || '',
-        quantity: Math.max(1, Math.round(it.quantity)),
-      }))
-      .filter((it) => it.productId && products.some((p) => p.id === it.productId));
+    const mapped = buildItemsFromOrder(lastCustomerOrder, customerId);
     if (mapped.length === 0) return;
     setItems(mapped);
   };
@@ -547,13 +579,17 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                             <button
                               type="button"
                               onClick={() => openPriceEditor(idx)}
-                              className="group flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-emerald-50"
-                              title="Definir preço individual para este cliente"
+                              className={`flex items-center gap-1 rounded-lg border px-2 py-1 text-xs font-bold shadow-xs transition-colors ${
+                                row.hasOverride
+                                  ? 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+                                  : row.price !== row.originalPrice && !row.isPromo
+                                    ? 'border-blue-200 bg-blue-50 text-blue-800 hover:bg-blue-100'
+                                    : 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                              }`}
+                              title="Clique para definir preço individual para este cliente"
                             >
-                              <span className="text-xs font-semibold text-gray-800 group-hover:text-emerald-700">
-                                {formatBRL(row.price)}
-                              </span>
-                              <Pencil className="h-3 w-3 text-gray-300 group-hover:text-emerald-600" />
+                              <Pencil className="h-3 w-3" />
+                              <span>{formatBRL(row.price)}</span>
                             </button>
                             {row.hasOverride && (
                               <button
