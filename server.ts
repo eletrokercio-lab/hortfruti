@@ -196,60 +196,6 @@ const serviceHeaders = {
   'Content-Type': 'application/json',
 };
 
-// POST /api/admin/bootstrap — cria a PRIMEIRA conta Master do sistema.
-// Só funciona enquanto nenhuma conta Master existir (uso único).
-app.post('/api/admin/bootstrap', async (_req: Request, res: Response) => {
-  if (!SUPABASE_SERVICE_ROLE_KEY) {
-    res.status(500).json({ error: 'SUPABASE_SERVICE_ROLE_KEY não configurada no servidor (My app > Secrets).' });
-    return;
-  }
-  try {
-    // Verifica se já existe master
-    const check = await fetch(
-      `${SUPABASE_URL}/rest/v1/app_profiles?role=eq.master&select=id&limit=1`,
-      { headers: serviceHeaders }
-    );
-    const existing = await check.json();
-    if (Array.isArray(existing) && existing.length > 0) {
-      res.status(403).json({ error: 'Já existe uma conta Master. Use o Painel Master para criar outras contas.' });
-      return;
-    }
-
-    const { email, password, fullName } = _req.body || {};
-    if (!email || !password || password.length < 6) {
-      res.status(400).json({ error: 'Informe e-mail e senha (mínimo 6 caracteres).' });
-      return;
-    }
-
-    const createRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users`, {
-      method: 'POST',
-      headers: serviceHeaders,
-      body: JSON.stringify({
-        email: email.trim().toLowerCase(),
-        password,
-        email_confirm: true,
-        user_metadata: { full_name: fullName || 'Master', role: 'master' },
-      }),
-    });
-    if (!createRes.ok) {
-      const err: any = await createRes.json().catch(() => ({}));
-      res.status(400).json({ error: err.msg || err.message || 'Falha ao criar usuário no Supabase Auth.' });
-      return;
-    }
-    const created: any = await createRes.json();
-
-    await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${created.id}`, {
-      method: 'PATCH',
-      headers: serviceHeaders,
-      body: JSON.stringify({ role: 'master', full_name: fullName || 'Master', status: 'ativo' }),
-    });
-
-    res.json({ success: true, message: `Conta Master criada para ${created.email}. Faça login no app.` });
-  } catch (err: any) {
-    res.status(500).json({ error: 'Erro no bootstrap: ' + err.message });
-  }
-});
-
 // GET /api/admin/users — lista todos os perfis
 app.get('/api/admin/users', async (req: Request, res: Response) => {
   const gate = await requireMaster(req);

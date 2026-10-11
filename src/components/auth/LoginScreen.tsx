@@ -5,7 +5,7 @@ import { useAuth } from '../../context/AuthContext';
 
 export const LoginScreen: React.FC = () => {
   const { signIn, signUpComprador, resetPassword } = useAuth();
-  const [mode, setMode] = useState<'login' | 'cadastro' | 'recuperar' | 'bootstrap'>('login');
+  const [mode, setMode] = useState<'login' | 'cadastro' | 'recuperar'>('login');
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -66,34 +66,6 @@ export const LoginScreen: React.FC = () => {
     setBusy(false);
   };
 
-  const handleBootstrap = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setInfo('');
-    if (!email || password.length < 6) {
-      setError('Informe e-mail e senha (mínimo 6 caracteres).');
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch('/api/admin/bootstrap', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, fullName: fullName || 'Master' }),
-      });
-      const json = await res.json();
-      if (json.success) {
-        setInfo(json.message + ' Use o formulário de login.');
-        setMode('login');
-      } else {
-        setError(json.error || 'Falha ao criar a conta Master.');
-      }
-    } catch {
-      setError('Erro de conexão com o servidor.');
-    }
-    setBusy(false);
-  };
-
   const inputClass =
     'w-full rounded-lg border border-gray-200 bg-white pl-10 pr-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-all';
 
@@ -108,43 +80,6 @@ export const LoginScreen: React.FC = () => {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white p-6 shadow-2xl">
-          {mode === 'bootstrap' && (
-            <form onSubmit={handleBootstrap} className="space-y-4">
-              <div>
-                <h2 className="text-lg font-bold text-gray-900">Primeiro acesso — conta Master</h2>
-                <p className="text-xs text-gray-500">
-                  Cria a conta de administrador (você). Só funciona enquanto nenhuma conta Master existir.
-                </p>
-              </div>
-              <div className="relative">
-                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Seu nome" className={inputClass} />
-              </div>
-              <div className="relative">
-                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="seu@email.com" className={inputClass} />
-              </div>
-              <div className="relative">
-                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Crie uma senha (mín. 6 caracteres)" className={inputClass} />
-              </div>
-
-              {error && (
-                <p className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700">{error}</p>
-              )}
-              {info && (
-                <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-medium text-emerald-700">{info}</p>
-              )}
-
-              <button type="submit" disabled={busy} className="w-full rounded-lg bg-gray-900 py-2.5 text-sm font-bold text-white hover:bg-black disabled:opacity-60">
-                {busy ? 'Criando...' : 'Criar conta Master'}
-              </button>
-              <button type="button" onClick={() => { setMode('login'); setError(''); setInfo(''); }} className="flex w-full items-center justify-center gap-1 text-xs text-gray-500 hover:text-emerald-700">
-                <ArrowLeft className="h-3 w-3" /> Voltar para o login
-              </button>
-            </form>
-          )}
-
           {mode === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
@@ -206,15 +141,6 @@ export const LoginScreen: React.FC = () => {
                   Sou comprador — criar conta
                 </button>
               </div>
-
-              <button
-                type="button"
-                onClick={() => { setMode('bootstrap'); setError(''); setInfo(''); }}
-                className="w-full pt-1 text-center text-[10px] text-gray-300 hover:text-gray-500"
-                title="Acesso do criador do sistema"
-              >
-                Primeiro acesso do criador (Master)
-              </button>
             </form>
           )}
 
