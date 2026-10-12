@@ -36,6 +36,7 @@ export const ProductsView: React.FC = () => {
   const [salesType, setSalesType] = useState<ProductSalesType>('caixa');
   const [defaultPrice, setDefaultPrice] = useState<number>(50);
   const [avgCost, setAvgCost] = useState<number>(30);
+  const [unitsPerBox, setUnitsPerBox] = useState<number>(0);
   const [origin, setOrigin] = useState('');
   const [notes, setNotes] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -140,6 +141,7 @@ export const ProductsView: React.FC = () => {
     setSalesType('caixa');
     setDefaultPrice(50);
     setAvgCost(30);
+    setUnitsPerBox(0);
     setOrigin('');
     setNotes('');
     setImageUrl('');
@@ -154,6 +156,7 @@ export const ProductsView: React.FC = () => {
     setSalesType(p.salesType);
     setDefaultPrice(p.defaultPrice);
     setAvgCost(p.avgCost);
+    setUnitsPerBox(p.unitsPerBox || 0);
     setOrigin(p.origin);
     setNotes(p.notes || '');
     setImageUrl(p.imageUrl || '');
@@ -215,6 +218,7 @@ export const ProductsView: React.FC = () => {
         salesType,
         defaultPrice,
         avgCost,
+        unitsPerBox: unitsPerBox > 0 ? unitsPerBox : undefined,
         origin,
         notes,
         imageUrl: imageUrl || undefined,
@@ -227,6 +231,7 @@ export const ProductsView: React.FC = () => {
         salesType,
         defaultPrice,
         avgCost,
+        unitsPerBox: unitsPerBox > 0 ? unitsPerBox : undefined,
         origin,
         notes,
         imageUrl: imageUrl || undefined,
@@ -656,6 +661,27 @@ export const ProductsView: React.FC = () => {
                   />
                 </div>
               </div>
+
+              {(unit === 'cx' || unit === 'un') && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    {unit === 'cx' ? 'Quantas unidades por caixa (venda cx/un)' : 'Quantas unidades por caixa (venda cx/un)'}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={unitsPerBox || ''}
+                    onChange={(e) => setUnitsPerBox(parseInt(e.target.value, 10) || 0)}
+                    placeholder="Ex: 20 — permite o cliente comprar por cx ou por unidade"
+                    className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs text-gray-900"
+                  />
+                  <p className="mt-1 text-[10px] text-gray-400">
+                    {unit === 'cx'
+                      ? 'Preenchido, o comprador pode escolher comprar a caixa ou unidades avulsas (preço da un = preço da cx ÷ N).'
+                      : 'Preenchido, o comprador pode escolher comprar a unidade ou a caixa fechada (preço da cx = preço da un × N).'}
+                  </p>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-gray-700 mb-1">Origem / Região Produtora</label>

@@ -23,12 +23,14 @@ import {
   ClipboardList,
   Bell,
   RefreshCw,
+  Pencil,
 } from 'lucide-react';
 import { getSupabaseClient } from '../../lib/supabase';
 import { playNotificationSound } from '../../utils/notify';
 import type {
   Product,
   ProductCategory,
+  ProductUnit,
   CustomPrice,
   Promotion,
   Order,
@@ -90,9 +92,12 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const [loading, setLoading] = useState(true);
   const [noCustomerLink, setNoCustomerLink] = useState(false);
 
-  // Carrinho
+  // Carrinho (chave = `${productId}::${unit}` — permite cx e un do mesmo produto)
   const [cart, setCart] = useState<Record<string, number>>({});
+  const [unitSel, setUnitSel] = useState<Record<string, ProductUnit>>({});
   const [cartOpen, setCartOpen] = useState(false);
+  // Edição de pedido pelo comprador (somente enquanto o pedido está pendente)
+  const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('todos');
 
@@ -106,6 +111,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const [copied, setCopied] = useState(false);
   const [checkoutError, setCheckoutError] = useState('');
   const [lastPaymentWasPix, setLastPaymentWasPix] = useState(false);
+  const [wasEdit, setWasEdit] = useState(false);
 
   // Dados de entrega do comprador (salvos no cadastro do cliente)
   const [custInfo, setCustInfo] = useState({
@@ -212,6 +218,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
           origin: p.origin || '',
           notes: p.notes || undefined,
           imageUrl: p.image_url || undefined,
+          unitsPerBox: p.units_per_box != null && Number(p.units_per_box) > 0 ? Number(p.units_per_box) : undefined,
           status: p.status,
         }))
       );
@@ -407,6 +414,31 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
     return ['todos', ...Array.from(set)];
   }, [products]);
 
+  // Variações de venda do produto: unidade base + alternativa (cx/un) quando
+  // o produto tem "un por caixa" — o preço é proporcional
+  const unitVariants = useCallback(
+    (product: Product): { unit: ProductUnit; price: number; original: number; isPromo: boolean }[] => {
+      const base = getPrice(product);
+      const list = [{ unit: product.unit, price: base.price, original: base.original, isPromo: base.isPromo }];
+      const altUnit: ProductUnit | null =
+        product.unit === 'cx' ? 'un' : product.unit === 'un' ? 'cx' : null;
+      if (altUnit && product.unitsPerBox && product.unitsPerBox > 0 && base.price > 0) {
+        const factor = product.unit === 'cx' ? 1 / product.unitsPerBox : product.unitsPerBox;
+        const price = Math.round(base.price * factor * 100) / 100;
+        const original = Math.round(base.original * factor * 100) / 100;
+        if (price > 0) list.push({ unit: altUnit, price, original, isPromo: base.isPromo });
+      }
+      return list;
+    },
+    [getPrice]
+  );
+
+  const cartKey = (productId: string, unit: string) => `${productId}::${unit}`;
+  const parseCartKey = (key: string): { productId: string; unit?: ProductUnit } => {
+    const [productId, unit] = key.split('::');
+    return { productId, unit: (unit as ProductUnit) || undefined };
+  };
+
   const visibleProducts = useMemo(
     () =>
       products.filter(
@@ -421,51 +453,61 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
 
   const cartItems = useMemo(() => {
     return Object.entries(cart)
-      .map(([productId, qty]) => {
+      .map(([key, qty]) => {
+        const { productId, unit } = parseCartKey(key);
         const product = products.find((p) => p.id === productId);
         if (!product) return null;
-        const priceInfo = getPrice(product);
+        const variants = unitVariants(product);
+        const variant = variants.find((v) => v.unit === unit) || variants[0];
         return {
+          key,
           product,
+          unit: variant.unit,
           qty,
-          price: priceInfo.price,
-          isPromo: priceInfo.isPromo,
-          subtotal: qty * priceInfo.price,
+          price: variant.price,
+          original: variant.original,
+          isPromo: variant.isPromo,
+          subtotal: qty * variant.price,
         };
       })
       .filter(Boolean) as {
+      key: string;
       product: Product;
+      unit: ProductUnit;
       qty: number;
       price: number;
+      original: number;
       isPromo: boolean;
       subtotal: number;
     }[];
-  }, [cart, products, getPrice]);
+  }, [cart, products, unitVariants]);
 
   const cartTotal = cartItems.reduce((acc, c) => acc + c.subtotal, 0);
   const cartCount = cartItems.reduce((acc, c) => acc + c.qty, 0);
 
-  const addToCart = (productId: string, delta: number) => {
+  const addToCart = (key: string, delta: number) => {
     // Regra: produto sem preço não pode ser adicionado ao carrinho
+    const { productId } = parseCartKey(key);
     const prod = products.find((p) => p.id === productId);
     if (prod && getPrice(prod).price <= 0 && delta > 0) return;
     setCart((prev) => {
       const next = { ...prev };
-      const q = (next[productId] || 0) + delta;
-      if (q <= 0) delete next[productId];
-      else next[productId] = q;
+      const q = (next[key] || 0) + delta;
+      if (q <= 0) delete next[key];
+      else next[key] = q;
       return next;
     });
   };
 
   // Define a quantidade digitada direto (agilidade: sem clicar várias vezes)
-  const setCartQty = (productId: string, qty: number) => {
+  const setCartQty = (key: string, qty: number) => {
+    const { productId } = parseCartKey(key);
     const prod = products.find((p) => p.id === productId);
     if (prod && getPrice(prod).price <= 0 && qty > 0) return;
     setCart((prev) => {
       const next = { ...prev };
-      if (qty <= 0) delete next[productId];
-      else next[productId] = qty;
+      if (qty <= 0) delete next[key];
+      else next[key] = qty;
       return next;
     });
   };
@@ -479,7 +521,10 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
     for (const it of items) {
       const prod = products.find((p) => p.id === it.productId || p.name === it.productName);
       if (prod && Number(it.quantity) > 0) {
-        newCart[prod.id] = (newCart[prod.id] || 0) + Number(it.quantity);
+        const unit: ProductUnit =
+          it.unit && unitVariants(prod).some((v) => v.unit === it.unit) ? it.unit : prod.unit;
+        const k = cartKey(prod.id, unit);
+        newCart[k] = (newCart[k] || 0) + Number(it.quantity);
       } else {
         missing++;
       }
@@ -493,6 +538,46 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
     if (missing > 0) {
       alert(`${missing} item(ns) não estão mais no catálogo e foram ignorados.`);
     }
+  };
+
+  // Editar pedido (só enquanto pendente): carrega os itens no carrinho com as
+  // mesmas unidades compradas e abre o checkout em modo edição
+  const startEditOrder = (orderId: string) => {
+    const order = orders.find((o) => o.id === orderId);
+    if (!order || order.status !== 'pendente') {
+      alert('Este pedido já está em preparo e não pode mais ser editado. Fale com o vendedor.');
+      return;
+    }
+    const items = orderItems[orderId] || [];
+    const newCart: Record<string, number> = {};
+    for (const it of items) {
+      const prod = products.find((p) => p.id === it.productId || p.name === it.productName);
+      if (prod && Number(it.quantity) > 0) {
+        const unit: ProductUnit =
+          it.unit && unitVariants(prod).some((v) => v.unit === it.unit) ? it.unit : prod.unit;
+        const k = cartKey(prod.id, unit);
+        newCart[k] = (newCart[k] || 0) + Number(it.quantity);
+      }
+    }
+    if (Object.keys(newCart).length === 0) {
+      alert('Não foi possível carregar os itens deste pedido para edição.');
+      return;
+    }
+    setCart(newCart);
+    setEditingOrderId(orderId);
+    setDeliveryDate(order.deliveryDate || new Date().toISOString().split('T')[0]);
+    setNotes(order.notes || '');
+    const del = deliveries.find((d) => d.orderId === orderId);
+    if (del?.shift === 'manha' || del?.shift === 'tarde') setShift(del.shift);
+    setTab('catalogo');
+    setCartOpen(true);
+  };
+
+  const cancelEditOrder = () => {
+    setEditingOrderId(null);
+    setCart({});
+    setCartOpen(false);
+    setNotes('');
   };
 
   const handleCheckout = async () => {
@@ -551,6 +636,45 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
         .join(' · ');
       const fullNotes = [notes?.trim(), deliveryContact].filter(Boolean).join(' — ');
 
+      // ===== EDITAR PEDIDO EXISTENTE (somente enquanto pendente) =====
+      if (editingOrderId) {
+        const itemsJson = cartItems.map((c) => ({
+          product_id: c.product.id,
+          product_name: c.product.name,
+          unit: c.unit,
+          quantity: c.qty,
+          unit_price: c.price,
+          original_price: c.original,
+          is_promo: c.isPromo,
+        }));
+        const { data: rpcData, error: rpcError } = await client.rpc('fn_comprador_editar_pedido', {
+          p_order_id: editingOrderId,
+          p_delivery_date: deliveryDate,
+          p_shift: shift,
+          p_notes: fullNotes || null,
+          p_items: itemsJson,
+          p_total: cartTotal,
+        });
+        if (rpcError) throw rpcError;
+        if (rpcData && rpcData.ok === false) {
+          setCheckoutError(rpcData.error || 'Não foi possível atualizar o pedido.');
+          setPlacing(false);
+          return;
+        }
+        const editedNumber = orders.find((o) => o.id === editingOrderId)?.orderNumber || '';
+        setOrderPlaced(editedNumber);
+        setWasEdit(true);
+        setLastPaymentWasPix(false);
+        setCart({});
+        setEditingOrderId(null);
+        setCartOpen(false);
+        setNotes('');
+        setTab('pedidos');
+        loadData();
+        setPlacing(false);
+        return;
+      }
+
       const { error: orderError } = await client.from('orders').insert({
         id: orderId,
         order_number: orderNumber,
@@ -574,10 +698,10 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
         order_id: orderId,
         product_id: c.product.id,
         product_name: c.product.name,
-        unit: c.product.unit,
+        unit: c.unit,
         quantity: c.qty,
         unit_price: c.price,
-        original_price: c.product.defaultPrice,
+        original_price: c.original,
         is_promo: c.isPromo,
         subtotal: c.subtotal,
       }));
@@ -637,6 +761,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       }
 
       setOrderPlaced(orderNumber);
+      setWasEdit(false);
       setLastPaymentWasPix(payment === 'pix');
       setCart({});
       setCartOpen(false);
@@ -819,7 +944,14 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
               <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
                 {visibleProducts.map((p) => {
                   const priceInfo = getPrice(p);
-                  const qty = cart[p.id] || 0;
+                  const variants = unitVariants(p);
+                  const selUnit: ProductUnit =
+                    unitSel[p.id] && variants.some((v) => v.unit === unitSel[p.id])
+                      ? unitSel[p.id]
+                      : p.unit;
+                  const selVariant = variants.find((v) => v.unit === selUnit) || variants[0];
+                  const key = cartKey(p.id, selUnit);
+                  const qty = cart[key] || 0;
                   // Regra: sem preço = card apagado, não selecionável
                   const noPrice = priceInfo.price <= 0;
                   return (
@@ -861,14 +993,33 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                           </span>
                         ) : (
                           <>
-                            {priceInfo.isPromo && (
-                              <span className="mr-1.5 text-[11px] text-gray-400 line-through">{formatBRL(priceInfo.original)}</span>
+                            {selVariant.isPromo && (
+                              <span className="mr-1.5 text-[11px] text-gray-400 line-through">{formatBRL(selVariant.original)}</span>
                             )}
-                            <span className="text-base font-black text-emerald-700">{formatBRL(priceInfo.price)}</span>
-                            <span className="text-[11px] text-gray-500"> /{p.unit}</span>
+                            <span className="text-base font-black text-emerald-700">{formatBRL(selVariant.price)}</span>
+                            <span className="text-[11px] text-gray-500"> /{selUnit}</span>
                           </>
                         )}
                       </div>
+
+                      {variants.length > 1 && !noPrice && (
+                        <div className="mt-1 flex gap-1">
+                          {variants.map((v) => (
+                            <button
+                              key={v.unit}
+                              onClick={() => setUnitSel((prev) => ({ ...prev, [p.id]: v.unit }))}
+                              className={`rounded-md border px-2 py-0.5 text-[10px] font-bold transition-colors ${
+                                selUnit === v.unit
+                                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+                              }`}
+                              title={`Preço por ${v.unit}: ${formatBRL(v.price)}`}
+                            >
+                              por {v.unit}
+                            </button>
+                          ))}
+                        </div>
+                      )}
 
                       {noPrice ? (
                         <button
@@ -879,26 +1030,26 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                         </button>
                       ) : qty === 0 ? (
                         <button
-                          onClick={() => addToCart(p.id, 1)}
+                          onClick={() => addToCart(key, 1)}
                           className="mt-2 flex w-full items-center justify-center gap-1 rounded-lg bg-emerald-600 py-1.5 text-xs font-bold text-white hover:bg-emerald-700 active:scale-[0.98]"
                         >
                           <Plus className="h-3.5 w-3.5" /> Adicionar
                         </button>
                       ) : (
                         <div className="mt-2 flex items-center justify-between rounded-lg bg-emerald-50 px-1.5 py-1">
-                          <button onClick={() => addToCart(p.id, -1)} className="rounded p-1 text-emerald-700 hover:bg-emerald-100">
+                          <button onClick={() => addToCart(key, -1)} className="rounded p-1 text-emerald-700 hover:bg-emerald-100">
                             <Minus className="h-4 w-4" />
                           </button>
                           <input
                             type="text"
                             inputMode="numeric"
                             value={qty}
-                            onChange={(e) => setCartQty(p.id, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)}
+                            onChange={(e) => setCartQty(key, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)}
                             className="w-9 bg-transparent text-center text-sm font-black text-emerald-800 focus:outline-none"
                             title="Digite a quantidade"
                           />
-                          <span className="text-[10px] font-bold text-emerald-700">{p.unit}</span>
-                          <button onClick={() => addToCart(p.id, 1)} className="rounded p-1 text-emerald-700 hover:bg-emerald-100">
+                          <span className="text-[10px] font-bold text-emerald-700">{selUnit}</span>
+                          <button onClick={() => addToCart(key, 1)} className="rounded p-1 text-emerald-700 hover:bg-emerald-100">
                             <Plus className="h-4 w-4" />
                           </button>
                         </div>
@@ -920,10 +1071,12 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
             {orderPlaced && (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="flex items-center gap-2 text-sm font-bold text-emerald-800">
-                  <CircleCheckBig className="h-4 w-4" /> Pedido {orderPlaced} enviado com sucesso!
+                  <CircleCheckBig className="h-4 w-4" /> Pedido {orderPlaced} {wasEdit ? 'atualizado' : 'enviado'} com sucesso!
                 </p>
-                <p className="text-xs text-emerald-700">A distribuidora foi notificada e iniciará a separação.</p>
-                {lastPaymentWasPix && (
+                <p className="text-xs text-emerald-700">
+                  {wasEdit ? 'A distribuidora foi notificada da alteração.' : 'A distribuidora foi notificada e iniciará a separação.'}
+                </p>
+                {lastPaymentWasPix && !wasEdit && (
                   <div className="mt-3 rounded-lg border border-emerald-300 bg-white p-3">
                     {pixKey ? (
                       <>
@@ -989,13 +1142,25 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                     </div>
                   </div>
 
-                  <button
-                    onClick={() => handleRepeatOrder(o.id)}
-                    className="mt-2 flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
-                  >
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Repetir pedido
-                  </button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleRepeatOrder(o.id)}
+                      className="flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      Repetir pedido
+                    </button>
+                    {o.status === 'pendente' && effectiveStatus === 'pendente' && (
+                      <button
+                        onClick={() => startEditOrder(o.id)}
+                        className="flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] font-bold text-amber-800 hover:bg-amber-100 transition-colors"
+                        title="Altera itens, quantidades, data ou turno enquanto o pedido não entrou em separação"
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                        Editar pedido
+                      </button>
+                    )}
+                  </div>
 
                   {/* Linha do tempo do status */}
                   <div className="mt-3 flex items-center">
@@ -1156,39 +1321,62 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
               <h2 className="flex items-center gap-2 text-lg font-black text-gray-900">
                 <ShoppingCart className="h-5 w-5 text-emerald-600" /> Seu pedido
               </h2>
-              <button onClick={() => setCartOpen(false)} className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100">
+              <button
+                onClick={() => {
+                  setCartOpen(false);
+                  if (editingOrderId) {
+                    setEditingOrderId(null);
+                    setCart({});
+                    setNotes('');
+                  }
+                }}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div className="divide-y divide-gray-100">
+              {editingOrderId && (
+                <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5">
+                  <p className="text-xs font-bold text-amber-800">
+                    Editando o pedido {orders.find((o) => o.id === editingOrderId)?.orderNumber} — ao salvar, ele será atualizado.
+                  </p>
+                  <button
+                    onClick={cancelEditOrder}
+                    className="shrink-0 rounded-lg border border-amber-300 px-2 py-1 text-[11px] font-bold text-amber-700 hover:bg-amber-100"
+                  >
+                    Cancelar edição
+                  </button>
+                </div>
+              )}
               {cartItems.map((c) => (
-                <div key={c.product.id} className="flex items-center justify-between gap-2 py-2.5">
+                <div key={c.key} className="flex items-center justify-between gap-2 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold text-gray-900">{c.product.name}</p>
                     <p className="text-xs text-gray-500">
-                      {c.qty} {c.product.unit} × {formatBRL(c.price)}
+                      {c.qty} {c.unit} × {formatBRL(c.price)}
                       {c.isPromo && <span className="ml-1 rounded bg-rose-100 px-1 text-[9px] font-black text-rose-600">PROMO</span>}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <button onClick={() => addToCart(c.product.id, -1)} className="rounded bg-gray-100 p-1 text-gray-600 hover:bg-gray-200">
+                    <button onClick={() => addToCart(c.key, -1)} className="rounded bg-gray-100 p-1 text-gray-600 hover:bg-gray-200">
                       <Minus className="h-3.5 w-3.5" />
                     </button>
                     <input
                       type="text"
                       inputMode="numeric"
                       value={c.qty}
-                      onChange={(e) => setCartQty(c.product.id, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)}
+                      onChange={(e) => setCartQty(c.key, parseInt(e.target.value.replace(/\D/g, ''), 10) || 0)}
                       className="w-10 rounded border border-gray-200 bg-white text-center text-sm font-black text-gray-900 focus:border-emerald-500 focus:outline-none"
                       title="Digite a quantidade"
                     />
-                    <span className="text-[10px] font-bold text-gray-500">{c.product.unit}</span>
-                    <button onClick={() => addToCart(c.product.id, 1)} className="rounded bg-gray-100 p-1 text-gray-600 hover:bg-gray-200">
+                    <span className="text-[10px] font-bold text-gray-500">{c.unit}</span>
+                    <button onClick={() => addToCart(c.key, 1)} className="rounded bg-gray-100 p-1 text-gray-600 hover:bg-gray-200">
                       <Plus className="h-3.5 w-3.5" />
                     </button>
                     <span className="w-20 text-right text-sm font-black text-gray-900">{formatBRL(c.subtotal)}</span>
-                    <button onClick={() => addToCart(c.product.id, -c.qty)} className="text-gray-300 hover:text-rose-500">
+                    <button onClick={() => addToCart(c.key, -c.qty)} className="text-gray-300 hover:text-rose-500">
                       <Trash2 className="h-4 w-4" />
                     </button>
                   </div>
@@ -1363,7 +1551,13 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
               disabled={placing || noCustomerLink}
               className="mt-4 w-full rounded-xl bg-emerald-600 py-3 text-sm font-black text-white shadow-lg hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-60"
             >
-              {placing ? 'Enviando pedido...' : `Enviar pedido · ${formatBRL(cartTotal)}`}
+              {placing
+                ? editingOrderId
+                  ? 'Salvando alterações...'
+                  : 'Enviando pedido...'
+                : editingOrderId
+                ? `Salvar alterações · ${formatBRL(cartTotal)}`
+                : `Enviar pedido · ${formatBRL(cartTotal)}`}
             </button>
           </div>
         </div>

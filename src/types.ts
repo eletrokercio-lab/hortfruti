@@ -89,6 +89,8 @@ export interface Product {
   origin: string;
   notes?: string;
   imageUrl?: string;
+  // Quantas unidades vendáveis cabem em 1 cx — habilita a venda alternada cx/unidade
+  unitsPerBox?: number;
   status: 'active' | 'inactive';
 }
 

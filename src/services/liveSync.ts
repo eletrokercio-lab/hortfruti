@@ -158,6 +158,7 @@ export const liveSync = {
         origin: p.origin || '',
         notes: p.notes || undefined,
         imageUrl: p.image_url || undefined,
+        unitsPerBox: p.units_per_box != null && Number(p.units_per_box) > 0 ? Number(p.units_per_box) : undefined,
         status: p.status,
       }));
       // Clientes
@@ -491,7 +492,7 @@ export const liveSync = {
     const client = getSupabaseClient();
     if (!client) return;
     try {
-      await client.from('products').upsert({
+      const payload: Record<string, unknown> = {
         id: p.id,
         name: p.name,
         category: p.category,
@@ -502,8 +503,15 @@ export const liveSync = {
         origin: p.origin || null,
         notes: p.notes || null,
         image_url: p.imageUrl || null,
+        units_per_box: p.unitsPerBox ?? null,
         status: p.status || 'active',
-      });
+      };
+      const { error } = await client.from('products').upsert(payload);
+      // Fallback: coluna units_per_box ainda não existe no banco → salva sem ela
+      if (error && /units_per_box|could not find/i.test(error.message)) {
+        delete payload.units_per_box;
+        await client.from('products').upsert(payload);
+      }
     } catch {
       // silencioso
     }

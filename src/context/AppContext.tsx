@@ -24,6 +24,7 @@ import {
   PaymentMethod,
   PaymentTerm,
   DeliveryStatus,
+  ProductUnit,
 } from '../types';
 import {
   INITIAL_PRODUCTS,
@@ -102,7 +103,7 @@ interface AppContextType {
   createOrder: (orderData: {
     customerId: string;
     deliveryDate: string;
-    items: { productId: string; quantity: number }[];
+    items: { productId: string; quantity: number; unitPrice?: number; unit?: ProductUnit }[];
     notes?: string;
     paymentMethod?: PaymentMethod;
     paymentTerm?: PaymentTerm;
@@ -567,7 +568,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const createOrder = (orderData: {
     customerId: string;
     deliveryDate: string;
-    items: { productId: string; quantity: number; unitPrice?: number }[];
+    items: { productId: string; quantity: number; unitPrice?: number; unit?: ProductUnit }[];
     notes?: string;
     paymentMethod?: PaymentMethod;
     paymentTerm?: PaymentTerm;
@@ -601,7 +602,25 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const priceInfo = getProductPriceForCustomer(item.productId, customer.id);
         // unitPrice explícito (ex.: pedido lançado pela IA com preço citado) tem prioridade
         const hasExplicitPrice = item.unitPrice != null && Number(item.unitPrice) > 0;
-        const unitPrice = hasExplicitPrice ? Number(item.unitPrice) : priceInfo.price;
+        // Unidade alternativa (cx/un) quando o produto tem "un por caixa":
+        // o preço da tabela é por unidade base — converte para a unidade vendida
+        const soldUnit: ProductUnit = (item.unit as ProductUnit) || (product ? product.unit : 'cx');
+        const isAltUnit =
+          !!product &&
+          !!product.unitsPerBox &&
+          product.unitsPerBox > 0 &&
+          soldUnit !== product.unit &&
+          (soldUnit === 'cx' || soldUnit === 'un') &&
+          (product.unit === 'cx' || product.unit === 'un');
+        let convertedPrice = priceInfo.price;
+        let convertedOriginal = priceInfo.originalPrice;
+        if (isAltUnit && product && product.unitsPerBox) {
+          const factor = product.unit === 'un' ? product.unitsPerBox : 1 / product.unitsPerBox;
+          convertedPrice = Math.round(priceInfo.price * factor * 100) / 100;
+          convertedOriginal = Math.round(priceInfo.originalPrice * factor * 100) / 100;
+        }
+        const basePrice = hasExplicitPrice ? Number(item.unitPrice) : convertedPrice;
+        const unitPrice = basePrice;
         // Item sem preço (produto zerado na tabela) NÃO entra no pedido — evita venda a R$ 0,00
         if (unitPrice <= 0) return null;
         const lineSubtotal = item.quantity * unitPrice;
@@ -610,10 +629,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           productId: item.productId,
           productName: product ? product.name : 'Produto Desconhecido',
-          unit: product ? product.unit : 'cx',
+          unit: soldUnit,
           quantity: item.quantity,
           unitPrice,
-          originalPrice: hasExplicitPrice ? unitPrice : priceInfo.originalPrice,
+          originalPrice: hasExplicitPrice ? unitPrice : convertedOriginal,
           isPromo: hasExplicitPrice ? false : priceInfo.isPromo,
           subtotal: lineSubtotal,
         } as OrderItem;

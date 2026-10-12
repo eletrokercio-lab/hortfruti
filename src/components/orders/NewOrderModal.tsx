@@ -16,7 +16,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatUnit } from '../../utils/formatters';
-import { PaymentMethod, PaymentTerm } from '../../types';
+import { PaymentMethod, PaymentTerm, Product, ProductUnit } from '../../types';
 import { PriceInput } from '../ui/PriceInput';
 
 interface NewOrderModalProps {
@@ -45,9 +45,10 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('pix');
   const [paymentTerm, setPaymentTerm] = useState<PaymentTerm>('7d');
 
-  // Items list (unitPriceOverride = preço ajustado só para este pedido)
+  // Items list (unitPriceOverride = preço ajustado só para este pedido;
+  // unit = unidade vendida na linha — cx ou un quando o produto permite)
   const [items, setItems] = useState<
-    { productId: string; quantity: number; unitPriceOverride?: number }[]
+    { productId: string; quantity: number; unitPriceOverride?: number; unit?: ProductUnit }[]
   >([]);
 
   // Editor de preço individual da linha
@@ -110,24 +111,34 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const buildItemsFromOrder = (
     order: (typeof orders)[number],
     custId: string
-  ): { productId: string; quantity: number; unitPriceOverride?: number }[] =>
+  ): { productId: string; quantity: number; unitPriceOverride?: number; unit?: ProductUnit }[] =>
     order.items
-      .map((it) => {
-        const exists = products.some((p) => p.id === it.productId);
-        if (!exists) return null;
-        const current = getProductPriceForCustomer(it.productId, custId).price;
-        const lastPaid = Number(it.unitPrice) || 0;
-        const override =
-          lastPaid > 0 && Math.abs(current - lastPaid) > 0.005
-            ? { unitPriceOverride: lastPaid }
-            : {};
-        return {
-          productId: it.productId,
-          quantity: Math.max(1, Math.round(it.quantity)),
-          ...override,
-        };
-      })
-      .filter((x): x is { productId: string; quantity: number; unitPriceOverride?: number } => x !== null);
+      .map(
+        (
+          it
+        ): {
+          productId: string;
+          quantity: number;
+          unitPriceOverride?: number;
+          unit?: ProductUnit;
+        } | null => {
+          const exists = products.some((p) => p.id === it.productId);
+          if (!exists) return null;
+          const current = getProductPriceForCustomer(it.productId, custId).price;
+          const lastPaid = Number(it.unitPrice) || 0;
+          const override =
+            lastPaid > 0 && Math.abs(current - lastPaid) > 0.005
+              ? { unitPriceOverride: lastPaid }
+              : {};
+          return {
+            productId: it.productId,
+            quantity: Math.max(1, Math.round(it.quantity)),
+            unit: it.unit,
+            ...override,
+          };
+        }
+      )
+      .filter((x): x is { productId: string; quantity: number; unitPriceOverride?: number; unit?: ProductUnit } => x !== null);
 
   const applyDraft = (draft: any) => {
     if (draft.customerId) {
@@ -222,8 +233,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   const handleUpdateItemProduct = (index: number, newProductId: string) => {
     const updated = [...items];
     updated[index].productId = newProductId;
-    // Produto trocado invalida ajuste de preço da linha
+    // Produto trocado invalida ajuste de preço e unidade da linha
     delete updated[index].unitPriceOverride;
+    delete updated[index].unit;
     setItems(updated);
   };
 
@@ -233,14 +245,27 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     setItems(updated);
   };
 
+  // Troca a unidade da linha (cx/un): limpa o ajuste de preço porque ele era
+  // por unidade — o preço é recalculado na nova unidade
+  const handleUpdateItemUnit = (index: number, unit: ProductUnit) => {
+    const updated = [...items];
+    if (updated[index].unit === unit) return;
+    updated[index] = { ...updated[index], unit };
+    delete updated[index].unitPriceOverride;
+    setItems(updated);
+  };
+
   const openPriceEditor = (idx: number) => {
     const it = items[idx];
+    const prod = products.find((p) => p.id === it.productId);
+    // Preço já convertido para a unidade vendida na linha (cx/un)
+    const soldUnit: ProductUnit = it.unit || (prod ? prod.unit : 'cx');
     const current =
       it.unitPriceOverride != null
         ? it.unitPriceOverride
-        : customerId
-          ? getProductPriceForCustomer(it.productId, customerId).price
-          : products.find((p) => p.id === it.productId)?.defaultPrice || 0;
+        : prod
+          ? priceForUnit(prod, soldUnit).price
+          : 0;
     setEditingIdx(idx);
     setEditPrice(current > 0 ? current : 0);
   };
@@ -281,20 +306,53 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
   if (!isOpen) return null;
 
+  // Preço do produto na unidade indicada (promoção > preço do cliente > tabela),
+  // convertido quando a venda é na unidade alternativa (cx <-> un)
+  const priceForUnit = (product: Product, unit: ProductUnit) => {
+    const base = customerId
+      ? getProductPriceForCustomer(product.id, customerId)
+      : { price: product.defaultPrice || 0, originalPrice: product.defaultPrice || 0, isPromo: false };
+    const hasAlt =
+      !!product.unitsPerBox &&
+      product.unitsPerBox > 0 &&
+      unit !== product.unit &&
+      (unit === 'cx' || unit === 'un') &&
+      (product.unit === 'cx' || product.unit === 'un');
+    if (!hasAlt || !product.unitsPerBox) return base;
+    const factor = product.unit === 'un' ? product.unitsPerBox : 1 / product.unitsPerBox;
+    return {
+      price: Math.round(base.price * factor * 100) / 100,
+      originalPrice: Math.round(base.originalPrice * factor * 100) / 100,
+      isPromo: base.isPromo,
+    };
+  };
+
   // Calculate totals
   let totalOrder = 0;
   const itemsCalculation = items.map((it) => {
     const product = products.find((p) => p.id === it.productId);
-    const priceInfo = customerId
-      ? getProductPriceForCustomer(it.productId, customerId)
-      : { price: product?.defaultPrice || 0, originalPrice: product?.defaultPrice || 0, isPromo: false };
+    const soldUnit: ProductUnit = it.unit || (product ? product.unit : 'cx');
+    const priceInfo = product
+      ? priceForUnit(product, soldUnit)
+      : { price: 0, originalPrice: 0, isPromo: false };
     const hasOverride = it.unitPriceOverride != null && it.unitPriceOverride > 0;
     const price = hasOverride ? (it.unitPriceOverride as number) : priceInfo.price;
     const lineTotal = it.quantity * price;
     totalOrder += lineTotal;
 
+    // Habilita o seletor cx/un na linha quando o produto tem "un por caixa"
+    const unitToggle =
+      product &&
+      product.unitsPerBox &&
+      product.unitsPerBox > 0 &&
+      (product.unit === 'cx' || product.unit === 'un')
+        ? { base: product.unit, alt: (product.unit === 'cx' ? 'un' : 'cx') as ProductUnit }
+        : null;
+
     return {
       product,
+      unit: soldUnit,
+      unitToggle,
       quantity: it.quantity,
       price,
       originalPrice: hasOverride ? priceInfo.price : priceInfo.originalPrice,
@@ -315,6 +373,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
       items: items.map((it) => ({
         productId: it.productId,
         quantity: it.quantity,
+        unit: it.unit,
         ...(it.unitPriceOverride != null && it.unitPriceOverride > 0
           ? { unitPrice: it.unitPriceOverride }
           : {}),
@@ -508,7 +567,31 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                         onChange={(e) => handleUpdateItemQty(idx, parseInt(e.target.value, 10) || 1)}
                         className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-xs font-bold text-gray-900"
                       />
-                      <span className="text-xs text-gray-500 font-semibold">{row.product?.unit}</span>
+                      {row.unitToggle ? (
+                        <div className="flex overflow-hidden rounded-lg border border-gray-200">
+                          {[row.unitToggle.base, row.unitToggle.alt].map((u) => (
+                            <button
+                              key={u}
+                              type="button"
+                              onClick={() => handleUpdateItemUnit(idx, u)}
+                              className={`px-2 py-1 text-[10px] font-bold transition-colors ${
+                                row.unit === u
+                                  ? 'bg-emerald-600 text-white'
+                                  : 'bg-white text-gray-500 hover:bg-gray-50'
+                              }`}
+                              title={
+                                u === row.unitToggle!.base
+                                  ? 'Unidade base do produto'
+                                  : 'Unidade alternativa (preço proporcional)'
+                              }
+                            >
+                              {u}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-500 font-semibold">{row.product?.unit}</span>
+                      )}
                     </div>
                   </div>
 
@@ -527,16 +610,18 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                           autoFocus
                         />
                         <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={handleSaveCustomerPrice}
-                            disabled={editPrice <= 0}
-                            className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700 disabled:opacity-40"
-                            title="Vale para este e todos os próximos pedidos deste cliente"
-                          >
-                            <UserCog className="h-3 w-3" />
-                            Preço do cliente
-                          </button>
+                          {(!row.unit || !row.product || row.unit === row.product.unit) && (
+                            <button
+                              type="button"
+                              onClick={handleSaveCustomerPrice}
+                              disabled={editPrice <= 0}
+                              className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[10px] font-bold text-white hover:bg-emerald-700 disabled:opacity-40"
+                              title="Vale para este e todos os próximos pedidos deste cliente"
+                            >
+                              <UserCog className="h-3 w-3" />
+                              Preço do cliente
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={handleSaveOrderOnlyPrice}

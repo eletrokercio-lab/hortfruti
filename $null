@@ -1,0 +1,4 @@
+')' de fechamento ausente na expressão.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : MissingEndParenthesisInExpression
+ 
