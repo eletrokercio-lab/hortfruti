@@ -92,7 +92,7 @@ begin
     md5(random()::text || clock_timestamp()::text)::uuid,
     'operador', 'order', 'Pedido Atualizado pelo Cliente',
     (v_customer_name || ' atualizou o pedido ' || v_order_number ||
-     ' (novo total R$ ' || to_char(p_total, 'FM999990,00') || ', entrega ' ||
+     ' (novo total R$ ' || replace(to_char(p_total, 'FM9999990.00'), '.', ',') || ', entrega ' ||
      to_char(p_delivery_date, 'DD/MM/YYYY') || ').'),
     'orders'
   );
