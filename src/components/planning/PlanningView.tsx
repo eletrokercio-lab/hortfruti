@@ -111,6 +111,46 @@ export const PlanningView: React.FC = () => {
     w.document.close();
   };
 
+  // Imprime a lista de necessidades (colheita ou compras) da Matriz,
+  // seguindo a escolha atual de cada produto
+  const printNeedsList = (kind: 'colher' | 'comprar') => {
+    const list = needs.filter((n) => n.status === kind);
+    const titulo = kind === 'colher' ? 'Lista de Colheita' : 'Lista de Compras';
+    const rows = list
+      .map(
+        (n) => `
+          <tr>
+            <td><strong>${n.productName}</strong></td>
+            <td>${n.category || '—'}</td>
+            <td>${n.neededQty} ${n.unit}</td>
+            <td>${n.availableQty} ${n.unit}</td>
+            <td><strong>${n.deficit} ${n.unit}</strong></td>
+          </tr>`
+      )
+      .join('');
+    const vazio = `<p style="color:#666;font-size:12px">Nenhum item nesta lista.</p>`;
+    const w = window.open('', '_blank');
+    if (!w) return;
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
+      <title>${titulo}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;margin:24px;color:#111}
+        h1{font-size:18px;margin:0 0 2px}
+        p.sub{color:#555;font-size:12px;margin:0 0 16px}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        th,td{border:1px solid #ddd;padding:8px;text-align:left;vertical-align:top}
+        th{background:${kind === 'colher' ? '#fef9c3' : '#ecfdf5'};text-transform:uppercase;font-size:10px}
+        @media print{button{display:none}}
+      </style></head><body>
+      <h1>${titulo}</h1>
+      <p class="sub">Emitida em ${new Date().toLocaleDateString('pt-BR')} às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} · ${list.length} ${list.length === 1 ? 'item' : 'itens'}</p>
+      ${list.length > 0 ? `<table><thead><tr><th>Produto</th><th>Categoria</th><th>Necessário p/ Pedidos</th><th>Disponível/Previsto</th><th>Falta</th></tr></thead>
+      <tbody>${rows}</tbody></table>` : vazio}
+      <script>window.onload=function(){window.print();}</script>
+      </body></html>`);
+    w.document.close();
+  };
+
   // Purchase modal state
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [purchaseSupplierId, setPurchaseSupplierId] = useState('');
@@ -286,6 +326,26 @@ export const PlanningView: React.FC = () => {
       {/* Tab 1: Matriz de Necessidades (PRD §12, §14) */}
       {activeTab === 'needs' && (
         <div className="space-y-4">
+          {/* Ações de impressão da matriz */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              onClick={() => printNeedsList('colher')}
+              className="flex items-center gap-1.5 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 transition-colors"
+              title="Imprime os produtos que estão marcados para colher"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Imprimir Colheita ({harvestsNeeded.length})
+            </button>
+            <button
+              onClick={() => printNeedsList('comprar')}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100 transition-colors"
+              title="Imprime os produtos que estão marcados para comprar"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Imprimir Compras ({purchasesNeeded.length})
+            </button>
+          </div>
+
           {/* Alert cards for immediate action */}
           {purchasesNeeded.length > 0 && (
             <div className="rounded-2xl border border-rose-200 bg-rose-50/70 p-4 text-rose-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
@@ -360,21 +420,34 @@ export const PlanningView: React.FC = () => {
                         )}
                       </td>
                       <td className="py-3 px-4 text-right">
-                        {item.status === 'comprar' && (
-                          <button
-                            onClick={() => handleOpenResolvePurchases(item)}
-                            className="rounded-lg bg-emerald-50 border border-emerald-300 px-2.5 py-1 text-[11px] font-bold text-emerald-800 hover:bg-emerald-100"
-                          >
-                            Comprar
-                          </button>
-                        )}
-                        {item.status === 'colher' && (
-                          <button
-                            onClick={() => handleOpenHarvestModal(item)}
-                            className="rounded-lg bg-amber-50 border border-amber-300 px-2.5 py-1 text-[11px] font-bold text-amber-800 hover:bg-amber-100"
-                          >
-                            Colher
-                          </button>
+                        {item.deficit > 0 ? (
+                          <div className="flex items-center justify-end gap-1.5">
+                            {/* O operador escolhe: colher OU comprar (a situação sugere, mas não obriga) */}
+                            <button
+                              onClick={() => handleOpenHarvestModal(item)}
+                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                                item.status === 'colher'
+                                  ? 'bg-amber-100 border-amber-300 text-amber-900'
+                                  : 'bg-white border-amber-200 text-amber-800 hover:bg-amber-50'
+                              }`}
+                              title={`Agendar colheita de ${item.deficit} ${item.unit}`}
+                            >
+                              Colher
+                            </button>
+                            <button
+                              onClick={() => handleOpenResolvePurchases(item)}
+                              className={`rounded-lg border px-2.5 py-1 text-[11px] font-bold transition-colors ${
+                                item.status === 'comprar'
+                                  ? 'bg-emerald-100 border-emerald-300 text-emerald-900'
+                                  : 'bg-white border-emerald-200 text-emerald-800 hover:bg-emerald-50'
+                              }`}
+                              title={`Criar pedido de compra de ${item.deficit} ${item.unit}`}
+                            >
+                              Comprar
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-[11px] font-bold text-emerald-700">OK</span>
                         )}
                       </td>
                     </tr>

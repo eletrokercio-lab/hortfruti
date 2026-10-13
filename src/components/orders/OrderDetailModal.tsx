@@ -111,7 +111,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2 sm:p-4 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-100">
-      <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden my-4 sm:my-6">
+      <div className="w-full max-w-2xl rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden my-4 sm:my-6 flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3 sm:px-6 sm:py-4 bg-gray-50/80">
           <div className="flex items-center gap-3">
@@ -146,7 +146,7 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
           </div>
         </div>
 
-        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6 overflow-y-auto">
           {/* Key metadata grid */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 border border-gray-100 rounded-xl p-3 bg-gray-50/50 text-xs">
             <div>
@@ -172,10 +172,10 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">
               Itens do Pedido ({order.items.length})
             </h3>
-            <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
-              <div className="overflow-x-auto">
+            <div className="border border-gray-200 rounded-xl overflow-hidden">
+              <div className="overflow-x-auto overflow-y-auto max-h-[45vh]">
                 <table className="w-full text-left text-xs min-w-[440px]">
-                  <thead className="bg-gray-50 text-gray-500 font-semibold">
+                  <thead className="bg-gray-50 text-gray-500 font-semibold sticky top-0 z-10 shadow-[0_1px_0_#e5e7eb]">
                     <tr>
                       <th className="py-2 px-3">Produto</th>
                       <th className="py-2 px-3 text-center">Quantidade</th>
@@ -355,38 +355,39 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
             )}
           </div>
 
-          {/* Total */}
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4">
-            <div>
-              <span className="text-xs text-gray-500">Valor Final:</span>
-              <p className="text-2xl font-black text-emerald-800">{formatBRL(order.total)}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {onEditOrder && order.status !== 'entregue' && order.status !== 'cancelado' && (
-                <button
-                  onClick={() => onEditOrder(order)}
-                  title="Corrigir itens, quantidades, preços ou data deste pedido"
-                  className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Editar
-                </button>
-              )}
+        </div>
+
+        {/* Rodapé fixo: total e ações sempre visíveis mesmo em pedidos grandes */}
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 bg-gray-50/60 px-4 py-3 sm:px-6 sm:py-4 shrink-0">
+          <div>
+            <span className="text-xs text-gray-500">Valor Final:</span>
+            <p className="text-2xl font-black text-emerald-800">{formatBRL(order.total)}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {onEditOrder && order.status !== 'entregue' && order.status !== 'cancelado' && (
               <button
-                onClick={handleDelete}
-                title="Excluir este pedido"
-                className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+                onClick={() => onEditOrder(order)}
+                title="Corrigir itens, quantidades, preços ou data deste pedido"
+                className="flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-700 hover:bg-emerald-100"
               >
-                <Trash2 className="h-3.5 w-3.5" />
-                Excluir
+                <Pencil className="h-3.5 w-3.5" />
+                Editar
               </button>
-              <button
-                onClick={onClose}
-                className="rounded-xl bg-gray-900 px-5 py-2 text-xs font-bold text-white hover:bg-black"
-              >
-                Fechar
-              </button>
-            </div>
+            )}
+            <button
+              onClick={handleDelete}
+              title="Excluir este pedido"
+              className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-700 hover:bg-red-100"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Excluir
+            </button>
+            <button
+              onClick={onClose}
+              className="rounded-xl bg-gray-900 px-5 py-2 text-xs font-bold text-white hover:bg-black"
+            >
+              Fechar
+            </button>
           </div>
         </div>
       </div>
