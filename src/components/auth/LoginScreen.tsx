@@ -1,11 +1,17 @@
 import React, { useState } from 'react';
-import { Eye, EyeOff, Lock, Mail, Phone, Building2, User, ArrowLeft, Sparkles } from 'lucide-react';
+import { Eye, EyeOff, Lock, Mail, Phone, Building2, User, ArrowLeft, Sparkles, Truck } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import { useAuth } from '../../context/AuthContext';
+
+const isDriverAccessUrl = (): boolean =>
+  new URLSearchParams(window.location.search).get('acesso') === 'entregador' ||
+  window.location.hash.toLowerCase().includes('entregador');
 
 export const LoginScreen: React.FC = () => {
   const { signIn, signUpComprador, resetPassword } = useAuth();
   const [mode, setMode] = useState<'login' | 'cadastro' | 'recuperar'>('login');
+  // Link exclusivo do entregador: ?acesso=entregador (ou botão "Área do Entregador")
+  const [driverMode, setDriverMode] = useState<boolean>(isDriverAccessUrl());
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -69,6 +75,22 @@ export const LoginScreen: React.FC = () => {
   const inputClass =
     'w-full rounded-lg border border-gray-200 bg-white pl-10 pr-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100 transition-all';
 
+  const openDriverMode = () => {
+    setDriverMode(true);
+    setMode('login');
+    setError('');
+    setInfo('');
+    window.history.replaceState(null, '', '?acesso=entregador');
+  };
+
+  const exitDriverMode = () => {
+    setDriverMode(false);
+    setMode('login');
+    setError('');
+    setInfo('');
+    window.history.replaceState(null, '', window.location.pathname);
+  };
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-900 via-emerald-800 to-gray-900 p-4">
       <div className="w-full max-w-md">
@@ -80,7 +102,73 @@ export const LoginScreen: React.FC = () => {
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white p-6 shadow-2xl">
-          {mode === 'login' && (
+          {driverMode ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-100">
+                  <Truck className="h-5 w-5 text-emerald-700" />
+                </span>
+                <div>
+                  <h2 className="text-lg font-bold text-gray-900">Área do Entregador</h2>
+                  <p className="text-xs text-gray-500">Entre com o e-mail e a senha fornecidos pela distribuidora.</p>
+                </div>
+              </div>
+
+              <div className="relative">
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className={inputClass}
+                  autoComplete="email"
+                />
+              </div>
+
+              <div className="relative">
+                <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Sua senha"
+                  className={`${inputClass} pr-10`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+
+              {error && (
+                <p className="rounded-lg bg-rose-50 border border-rose-200 px-3 py-2 text-xs font-medium text-rose-700">{error}</p>
+              )}
+              {info && (
+                <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-medium text-emerald-700">{info}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="w-full rounded-lg bg-emerald-600 py-2.5 text-sm font-bold text-white shadow-md transition-all hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-60"
+              >
+                {busy ? 'Entrando...' : 'Entrar para as minhas entregas'}
+              </button>
+
+              <p className="text-center text-[11px] text-gray-400">
+                Não é entregador?{' '}
+                <button type="button" onClick={exitDriverMode} className="font-bold text-emerald-700 hover:text-emerald-800">
+                  Acesso geral do sistema
+                </button>
+              </p>
+            </form>
+          ) : mode === 'login' && (
             <form onSubmit={handleLogin} className="space-y-4">
               <div>
                 <h2 className="text-lg font-bold text-gray-900">Entrar no sistema</h2>
@@ -141,6 +229,15 @@ export const LoginScreen: React.FC = () => {
                   Sou comprador — criar conta
                 </button>
               </div>
+
+              <button
+                type="button"
+                onClick={openDriverMode}
+                className="flex w-full items-center justify-center gap-1.5 border-t border-gray-100 pt-3 text-xs font-bold text-gray-500 hover:text-emerald-700"
+              >
+                <Truck className="h-3.5 w-3.5" />
+                Sou entregador — acessar minhas entregas
+              </button>
             </form>
           )}
 

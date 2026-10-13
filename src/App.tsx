@@ -8,7 +8,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { BuyerPortal } from './components/buyer/BuyerPortal';
-import { ShieldAlert, LogOut } from 'lucide-react';
+import { ShieldAlert, LogOut, Truck } from 'lucide-react';
 import logo from './assets/logo.png';
 import { InstallPrompt } from './components/pwa/InstallPrompt';
 
@@ -229,6 +229,33 @@ const AppRoot: React.FC = () => {
   // Sem sessão: tela de login / cadastro
   if (!session || !profile) {
     return <LoginScreen />;
+  }
+
+  // Link exclusivo do entregador (?acesso=entregador): se a sessão salva no
+  // aparelho for de outro perfil (ex.: comprador), não entra direto — pede para sair
+  if (
+    new URLSearchParams(window.location.search).get('acesso') === 'entregador' &&
+    profile.role !== 'entregador'
+  ) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-900 via-emerald-800 to-gray-900 p-4">
+        <div className="max-w-sm rounded-2xl bg-white p-6 text-center shadow-2xl">
+          <Truck className="mx-auto h-10 w-10 text-emerald-700" />
+          <h2 className="mt-2 text-lg font-black text-gray-900">Área exclusiva do entregador</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Este aparelho está logado como <strong>{profile.full_name || profile.email}</strong>{' '}
+            ({profile.role === 'comprador' ? 'comprador' : 'equipe'}). Para acessar as entregas, saia
+            da conta atual e entre com o e-mail de entregador.
+          </p>
+          <button
+            onClick={() => signOut()}
+            className="mt-4 w-full rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700"
+          >
+            Sair e entrar como entregador
+          </button>
+        </div>
+      </div>
+    );
   }
 
   // Conta bloqueada
