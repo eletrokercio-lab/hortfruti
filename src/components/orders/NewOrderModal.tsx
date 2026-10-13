@@ -272,14 +272,32 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     setItems(updated);
   };
 
-  // Troca a unidade da linha (cx/un): limpa o ajuste de preço porque ele era
-  // por unidade — o preço é recalculado na nova unidade
+  // Troca a unidade da linha (cx/un):
+  // - com "un por caixa": preço converte automaticamente (limpa o ajuste)
+  // - sem conversão: mantém o valor atual como ajuste e abre o editor p/ corrigir
   const handleUpdateItemUnit = (index: number, unit: ProductUnit) => {
     const updated = [...items];
     if (updated[index].unit === unit) return;
+    const prod = products.find((p) => p.id === updated[index].productId);
+    const canConvert = !!(prod && prod.unitsPerBox && prod.unitsPerBox > 0);
+    const oldUnit: ProductUnit =
+      updated[index].unit || (prod ? prod.unit : 'cx');
+    const currentPrice =
+      updated[index].unitPriceOverride != null
+        ? (updated[index].unitPriceOverride as number)
+        : prod
+          ? priceForUnit(prod, oldUnit).price
+          : 0;
     updated[index] = { ...updated[index], unit };
-    delete updated[index].unitPriceOverride;
-    setItems(updated);
+    if (canConvert) {
+      delete updated[index].unitPriceOverride;
+      setItems(updated);
+    } else {
+      updated[index].unitPriceOverride = currentPrice > 0 ? currentPrice : 0;
+      setItems(updated);
+      setEditingIdx(index);
+      setEditPrice(currentPrice > 0 ? currentPrice : 0);
+    }
   };
 
   const openPriceEditor = (idx: number) => {
@@ -367,13 +385,17 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     const lineTotal = it.quantity * price;
     totalOrder += lineTotal;
 
-    // Habilita o seletor cx/un na linha quando o produto tem "un por caixa"
+    // Seletor cx/un na linha: sempre disponível para produtos vendidos em cx ou un.
+    // autoConvert=true quando há "un por caixa" (preço converte sozinho);
+    // sem conversão, o operador define o preço manual (o editor abre ao trocar).
     const unitToggle =
       product &&
-      product.unitsPerBox &&
-      product.unitsPerBox > 0 &&
       (product.unit === 'cx' || product.unit === 'un')
-        ? { base: product.unit, alt: (product.unit === 'cx' ? 'un' : 'cx') as ProductUnit }
+        ? {
+            base: product.unit,
+            alt: (product.unit === 'cx' ? 'un' : 'cx') as ProductUnit,
+            autoConvert: !!(product.unitsPerBox && product.unitsPerBox > 0),
+          }
         : null;
 
     return {
@@ -630,9 +652,11 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                                   : 'bg-white text-gray-500 hover:bg-gray-50'
                               }`}
                               title={
-                                u === row.unitToggle!.base
-                                  ? 'Unidade base do produto'
-                                  : 'Unidade alternativa (preço proporcional)'
+                                row.unitToggle!.autoConvert
+                                  ? u === row.unitToggle!.base
+                                    ? 'Unidade base do produto'
+                                    : 'Unidade alternativa (preço converte automaticamente)'
+                                  : 'Trocar unidade — o preço desta linha será ajustado manualmente'
                               }
                             >
                               {u}
