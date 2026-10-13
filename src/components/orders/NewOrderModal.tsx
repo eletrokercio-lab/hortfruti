@@ -432,8 +432,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-100">
-      <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl my-6 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3 sm:p-4 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-100">
+      <div className="w-full max-w-3xl rounded-2xl border border-gray-200 bg-white shadow-2xl my-4 sm:my-6 overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 bg-emerald-50/50">
           <div className="flex items-center gap-2">
@@ -506,7 +506,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
           {aiError && <p className="text-[11px] text-rose-600 mt-1">{aiError}</p>}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="flex-1 min-h-0 overflow-y-auto p-4 sm:p-6 space-y-5">
           {/* Top Fields: Cliente, Data Entrega, Pagamento, Prazo */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="lg:col-span-2">
@@ -589,13 +589,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               </button>
             </div>
 
-            <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
+            <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-[45vh] overflow-y-auto">
               {itemsCalculation.map((row, idx) => (
                 <div
                   key={idx}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-3 bg-white hover:bg-gray-50/50"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between p-3 gap-3 bg-white hover:bg-gray-50/50 min-w-0"
                 >
-                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div className="flex-1 min-w-0 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <select
                       value={row.product?.id}
                       onChange={(e) => handleUpdateItemProduct(idx, e.target.value)}
@@ -645,7 +645,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between sm:justify-end gap-4 min-w-[200px]">
+                  <div className="flex items-center justify-between sm:justify-end gap-4 min-w-0 sm:min-w-[200px]">
                     {editingIdx === idx ? (
                       // Editor de preço individual inline
                       <div className="w-full rounded-xl border border-emerald-300 bg-emerald-50/60 p-2.5">
@@ -773,8 +773,8 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
             />
           </div>
 
-          {/* Total & Confirmation Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-200 pt-4 bg-gray-50 -mx-6 -mb-6 p-6">
+          {/* Total & Confirmation Bar — fixo enquanto rola os itens */}
+          <div className="sticky bottom-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-gray-200 bg-gray-50 -mx-4 sm:-mx-6 -mb-4 sm:-mb-6 mt-5 p-4 sm:p-6 z-10">
             <div>
               <p className="text-xs text-gray-500">Valor Total do Pedido:</p>
               <p className="text-2xl font-black text-emerald-800">{formatBRL(totalOrder)}</p>
