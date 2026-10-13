@@ -108,6 +108,14 @@ interface AppContextType {
     paymentMethod?: PaymentMethod;
     paymentTerm?: PaymentTerm;
   }) => Order;
+  updateOrder: (
+    orderId: string,
+    orderData: {
+      deliveryDate: string;
+      items: { productId: string; quantity: number; unitPrice?: number; unit?: ProductUnit }[];
+      notes?: string;
+    }
+  ) => Order;
   updateOrderStatus: (orderId: string, status: Order['status']) => void;
   deleteOrder: (orderId: string) => void;
 
@@ -742,6 +750,143 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     })();
 
     return newOrder;
+  };
+
+  // Edição de pedido pelo operador: recalcula itens/totais e sincroniza
+  // entrega, recebível e notifica o comprador
+  const updateOrder = (
+    orderId: string,
+    orderData: {
+      deliveryDate: string;
+      items: { productId: string; quantity: number; unitPrice?: number; unit?: ProductUnit }[];
+      notes?: string;
+    }
+  ): Order => {
+    const existing = orders.find((o) => o.id === orderId);
+    if (!existing) throw new Error('Pedido não encontrado.');
+    const customer = customers.find((c) => c.id === existing.customerId);
+    if (!customer) throw new Error('Cliente do pedido não encontrado.');
+
+    let subtotal = 0;
+    const orderItems: OrderItem[] = orderData.items
+      .map((item) => {
+        const product = products.find((p) => p.id === item.productId);
+        const priceInfo = getProductPriceForCustomer(item.productId, customer.id);
+        const hasExplicitPrice = item.unitPrice != null && Number(item.unitPrice) > 0;
+        const soldUnit: ProductUnit = (item.unit as ProductUnit) || (product ? product.unit : 'cx');
+        const isAltUnit =
+          !!product &&
+          !!product.unitsPerBox &&
+          product.unitsPerBox > 0 &&
+          soldUnit !== product.unit &&
+          (soldUnit === 'cx' || soldUnit === 'un') &&
+          (product.unit === 'cx' || product.unit === 'un');
+        let convertedPrice = priceInfo.price;
+        let convertedOriginal = priceInfo.originalPrice;
+        if (isAltUnit && product && product.unitsPerBox) {
+          const factor = product.unit === 'un' ? product.unitsPerBox : 1 / product.unitsPerBox;
+          convertedPrice = Math.round(priceInfo.price * factor * 100) / 100;
+          convertedOriginal = Math.round(priceInfo.originalPrice * factor * 100) / 100;
+        }
+        const unitPrice = hasExplicitPrice ? Number(item.unitPrice) : convertedPrice;
+        if (unitPrice <= 0) return null;
+        const lineSubtotal = item.quantity * unitPrice;
+        subtotal += lineSubtotal;
+
+        return {
+          productId: item.productId,
+          productName: product ? product.name : 'Produto Desconhecido',
+          unit: soldUnit,
+          quantity: item.quantity,
+          unitPrice,
+          originalPrice: hasExplicitPrice ? unitPrice : convertedOriginal,
+          isPromo: hasExplicitPrice ? false : priceInfo.isPromo,
+          subtotal: lineSubtotal,
+        } as OrderItem;
+      })
+      .filter((it): it is OrderItem => it !== null);
+
+    if (orderItems.length === 0) {
+      throw new Error('Nenhum item com preço: defina o preço antes de salvar o pedido.');
+    }
+
+    const total = subtotal;
+
+    const updatedOrder: Order = {
+      ...existing,
+      deliveryDate: orderData.deliveryDate,
+      items: orderItems,
+      subtotal,
+      total,
+      notes: orderData.notes,
+    };
+
+    // Entrega vinculada: nova data e novos itens
+    let updatedDelivery: Delivery | null = null;
+    setDeliveries((prev) =>
+      prev.map((d) => {
+        if (d.orderId !== orderId && d.orderNumber !== existing.orderNumber) return d;
+        updatedDelivery = {
+          ...d,
+          date: orderData.deliveryDate,
+          items: orderItems.map((i) => ({
+            productId: i.productId,
+            productName: i.productName,
+            expectedQty: i.quantity,
+            unit: i.unit,
+          })),
+          cratesDelivered: orderItems.reduce((acc, curr) => (curr.unit === 'cx' ? acc + curr.quantity : acc), 0),
+          notes: orderData.notes ?? d.notes,
+        };
+        return updatedDelivery;
+      })
+    );
+
+    // Recebível em aberto acompanha o novo total
+    setReceivables((prev) =>
+      prev.map((r) =>
+        r.orderId === orderId && r.status === 'aberto'
+          ? { ...r, amount: total, dueDate: orderData.deliveryDate }
+          : r
+      )
+    );
+
+    setOrders((prev) => prev.map((o) => (o.id === orderId ? updatedOrder : o)));
+
+    // Notifica o comprador sobre o ajuste
+    const fmt = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(total);
+    const newNotif: NotificationItem = {
+      id: `notif-${Date.now()}`,
+      type: 'order',
+      title: 'Pedido Atualizado',
+      message: `Seu pedido ${existing.orderNumber} foi ajustado pela distribuidora — novo total ${fmt}, entrega ${updatedOrder.deliveryDate.split('-').reverse().join('/')}.`,
+      date: 'Agora mesmo',
+      read: false,
+      actionTab: 'orders',
+    };
+    setNotifications((prev) => [newNotif, ...prev]);
+
+    // Persistir no Supabase (silencioso)
+    (async () => {
+      const { liveSync } = await import('../services/liveSync');
+      await liveSync.updateOrder({
+        ...updatedOrder,
+        deliveryId: updatedDelivery ? (updatedDelivery as Delivery).id : existing.deliveryId,
+      });
+      const notifId = genNotificationId();
+      markNotificationSeen(notifId);
+      await liveSync.pushNotification({
+        id: notifId,
+        audience: 'comprador',
+        customerId: customer.id,
+        type: 'order',
+        title: newNotif.title,
+        message: newNotif.message,
+        actionTab: 'orders',
+      });
+    })();
+
+    return updatedOrder;
   };
 
   const updateOrderStatus = (orderId: string, status: Order['status']) => {
@@ -1785,6 +1930,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         getCustomerCrateBalance,
 
         createOrder,
+        updateOrder,
         updateOrderStatus,
         deleteOrder,
         updateDeliveryStatus,

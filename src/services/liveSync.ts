@@ -345,6 +345,67 @@ export const liveSync = {
     await client.from('orders').update({ status }).eq('id', orderId);
   },
 
+  // Edição de pedido existente (operador): itens, totais, data e entrega
+  updateOrder: async (order: Order): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client
+        .from('orders')
+        .update({
+          delivery_date: order.deliveryDate,
+          subtotal: order.subtotal,
+          total: order.total,
+          notes: order.notes || null,
+        })
+        .eq('id', order.id);
+
+      // Itens: reescreve (delete + insert)
+      await client.from('order_items').delete().eq('order_id', order.id);
+      if (order.items.length > 0) {
+        await client.from('order_items').insert(
+          order.items.map((it) => ({
+            order_id: order.id,
+            product_id: it.productId,
+            product_name: it.productName,
+            unit: it.unit,
+            quantity: it.quantity,
+            unit_price: it.unitPrice,
+            original_price: it.originalPrice,
+            is_promo: it.isPromo,
+            subtotal: it.subtotal,
+          }))
+        );
+      }
+
+      // Entrega vinculada: data e itens p/ separação
+      if (order.deliveryId) {
+        await client
+          .from('deliveries')
+          .update({
+            date: order.deliveryDate,
+            items: order.items.map((i) => ({
+              productId: i.productId,
+              productName: i.productName,
+              expectedQty: i.quantity,
+              unit: i.unit,
+            })),
+            notes: order.notes || null,
+          })
+          .eq('id', order.deliveryId);
+      }
+
+      // Recebível em aberto acompanha o novo total
+      await client
+        .from('accounts_receivable')
+        .update({ amount: order.total, due_date: order.deliveryDate })
+        .eq('order_id', order.id)
+        .eq('status', 'aberto');
+    } catch {
+      // silencioso: o estado local já foi atualizado
+    }
+  },
+
   pushDeliveryStatus: async (
     deliveryId: string,
     status: DeliveryStatus,

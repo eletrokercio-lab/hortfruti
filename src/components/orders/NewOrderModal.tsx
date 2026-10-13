@@ -16,25 +16,28 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatUnit } from '../../utils/formatters';
-import { PaymentMethod, PaymentTerm, Product, ProductUnit } from '../../types';
+import { PaymentMethod, PaymentTerm, Product, ProductUnit, Order } from '../../types';
 import { PriceInput } from '../ui/PriceInput';
 
 interface NewOrderModalProps {
   isOpen: boolean;
   onClose: () => void;
   initialDraft?: any;
+  editingOrder?: Order | null;
 }
 
 export const NewOrderModal: React.FC<NewOrderModalProps> = ({
   isOpen,
   onClose,
   initialDraft,
+  editingOrder,
 }) => {
   const {
     customers,
     products,
     orders,
     createOrder,
+    updateOrder,
     getProductPriceForCustomer,
     setCustomerCustomPrice,
   } = useApp();
@@ -62,6 +65,30 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
 
   // Default tomorrow for delivery
   useEffect(() => {
+    if (isOpen && editingOrder) {
+      // Modo edição: pré-preenche com os dados atuais do pedido
+      setCustomerId(editingOrder.customerId);
+      setDeliveryDate(editingOrder.deliveryDate);
+      setNotes(editingOrder.notes || '');
+      setPaymentMethod(editingOrder.paymentMethod);
+      setPaymentTerm(editingOrder.paymentTerm);
+      setItems(
+        editingOrder.items
+          .filter((it) => products.some((p) => p.id === it.productId))
+          .map((it) => {
+            const current = getProductPriceForCustomer(it.productId, editingOrder.customerId).price;
+            const paid = Number(it.unitPrice) || 0;
+            return {
+              productId: it.productId,
+              quantity: it.quantity,
+              unit: it.unit,
+              // Mantém o preço pago pelo cliente quando a tabela mudou desde então
+              ...(paid > 0 && Math.abs(current - paid) > 0.005 ? { unitPriceOverride: paid } : {}),
+            };
+          })
+      );
+      return;
+    }
     if (isOpen) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -76,7 +103,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
         applyDraft(initialDraft);
       }
     }
-  }, [isOpen, initialDraft, customers, products]);
+  }, [isOpen, editingOrder, initialDraft, customers, products]);
 
   // When customer changes, update default payment conditions
   const handleCustomerChange = (id: string) => {
@@ -367,17 +394,35 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
     if (!customerId) return;
     if (items.length === 0) return;
 
+    const payloadItems = items.map((it) => ({
+      productId: it.productId,
+      quantity: it.quantity,
+      unit: it.unit,
+      ...(it.unitPriceOverride != null && it.unitPriceOverride > 0
+        ? { unitPrice: it.unitPriceOverride }
+        : {}),
+    }));
+
+    // Modo edição: atualiza o pedido existente (entrega, recebível e
+    // notificação do comprador são sincronizados pelo updateOrder)
+    if (editingOrder) {
+      try {
+        updateOrder(editingOrder.id, {
+          deliveryDate,
+          items: payloadItems,
+          notes,
+        });
+        onClose();
+      } catch (err: any) {
+        alert(err?.message || 'Não foi possível atualizar o pedido.');
+      }
+      return;
+    }
+
     createOrder({
       customerId,
       deliveryDate,
-      items: items.map((it) => ({
-        productId: it.productId,
-        quantity: it.quantity,
-        unit: it.unit,
-        ...(it.unitPriceOverride != null && it.unitPriceOverride > 0
-          ? { unitPrice: it.unitPriceOverride }
-          : {}),
-      })),
+      items: payloadItems,
       notes,
       paymentMethod,
       paymentTerm,
@@ -396,9 +441,13 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
               <ShoppingBag className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-gray-900">Novo Pedido de Venda</h2>
+              <h2 className="text-base font-bold text-gray-900">
+                {editingOrder ? `Editar Pedido ${editingOrder.orderNumber}` : 'Novo Pedido de Venda'}
+              </h2>
               <p className="text-xs text-gray-500">
-                Preços de cliente e promoções aplicados automaticamente
+                {editingOrder
+                  ? `Cliente: ${editingOrder.customerName} — salve para atualizar o pedido`
+                  : 'Preços de cliente e promoções aplicados automaticamente'}
               </p>
             </div>
           </div>
@@ -468,8 +517,9 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                 <select
                   value={customerId}
                   onChange={(e) => handleCustomerChange(e.target.value)}
+                  disabled={!!editingOrder}
                   required
-                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
+                  className="w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 focus:border-emerald-500 focus:outline-hidden focus:ring-1 focus:ring-emerald-500 disabled:bg-gray-100 disabled:text-gray-500"
                 >
                   {customers.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -743,7 +793,7 @@ export const NewOrderModal: React.FC<NewOrderModalProps> = ({
                 className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-6 py-2.5 text-xs font-bold text-white shadow-md transition-all active:scale-95"
               >
                 <CheckCircle2 className="h-4 w-4" />
-                <span>Confirmar e Gerar Entrega</span>
+                <span>{editingOrder ? 'Salvar Alterações' : 'Confirmar e Gerar Entrega'}</span>
               </button>
             </div>
           </div>

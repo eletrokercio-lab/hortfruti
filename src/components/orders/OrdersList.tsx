@@ -15,6 +15,7 @@ import { useApp } from '../../context/AppContext';
 import { Order, OrderStatus } from '../../types';
 import { formatBRL, formatDate, getOrderStatusBadge } from '../../utils/formatters';
 import { OrderDetailModal } from './OrderDetailModal';
+import { NewOrderModal } from './NewOrderModal';
 
 interface OrdersListProps {
   onOpenNewOrder: () => void;
@@ -29,6 +30,8 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [openDriverPick, setOpenDriverPick] = useState(false);
+  // Edição de pedido pelo operador (abre o NewOrderModal em modo edição)
+  const [editingOrder, setEditingOrder] = useState<Order | null>(null);
 
   // Data de hoje/amanhã no formato YYYY-MM-DD (local)
   const toISODate = (d: Date) => {
@@ -305,6 +308,17 @@ export const OrdersList: React.FC<OrdersListProps> = ({ onOpenNewOrder }) => {
         isOpen={isDetailOpen}
         onClose={() => setIsDetailOpen(false)}
         initialDriverPick={openDriverPick}
+        onEditOrder={(ord) => {
+          setIsDetailOpen(false);
+          setEditingOrder(ord);
+        }}
+      />
+
+      {/* Editar pedido existente (modo edição do NewOrderModal) */}
+      <NewOrderModal
+        isOpen={!!editingOrder}
+        onClose={() => setEditingOrder(null)}
+        editingOrder={editingOrder}
       />
     </div>
   );
