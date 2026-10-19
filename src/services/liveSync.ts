@@ -473,7 +473,7 @@ export const liveSync = {
     try {
       const { error } = await client.from('notifications').insert(
         customerIds.map((cid) => ({
-          id: `${n.id}-${cid}`,
+          id: crypto.randomUUID(),
           audience: 'comprador' as const,
           customer_id: cid,
           type: n.type,
