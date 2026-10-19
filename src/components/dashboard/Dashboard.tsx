@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Users,
   ShoppingBasket,
+  Megaphone,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { formatBRL, formatDate, getOrderStatusBadge } from '../../utils/formatters';
@@ -228,6 +229,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ onOpenNewOrder, onOpenNewC
         >
           <ShoppingBasket className="h-4 w-4 text-orange-600" />
           <span>Produtos (Tabela Base)</span>
+        </button>
+
+        <button
+          onClick={() => {
+            window.location.hash = 'banners-da-loja';
+            setCurrentTab('products');
+          }}
+          className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 px-3.5 py-2.5 text-xs font-semibold text-gray-700 shadow-2xs transition-colors"
+        >
+          <Megaphone className="h-4 w-4 text-emerald-600" />
+          <span>Banners da Loja</span>
         </button>
 
         <button

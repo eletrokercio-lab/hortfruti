@@ -24,7 +24,10 @@ export const ProductsView: React.FC = () => {
   const { products, createProduct, updateProduct } = useApp();
 
   // Sub-painéis da tela: catálogo de produtos ou banners da loja
-  const [panel, setPanel] = useState<'produtos' | 'banners'>('produtos');
+  // (atalho da Central do Dia marca o hash #banners-da-loja)
+  const [panel, setPanel] = useState<'produtos' | 'banners'>(() =>
+    window.location.hash.toLowerCase().includes('banner') ? 'banners' : 'produtos'
+  );
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
