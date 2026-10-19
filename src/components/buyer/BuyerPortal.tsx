@@ -1006,11 +1006,41 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                     title={b.productId ? 'Ver este produto' : undefined}
                   >
                     {slide.kind === 'custom' ? (
-                      <img
-                        src={b.imageUrl}
-                        alt={b.title || 'Promoção'}
-                        className="aspect-[5/2] w-full object-cover"
-                      />
+                      <div className="relative">
+                        <img
+                          src={b.imageUrl}
+                          alt={b.title || 'Promoção'}
+                          className="aspect-[5/2] w-full object-cover"
+                        />
+                        {/* Selo de preço do produto vinculado — o cliente compra por esse valor */}
+                        {(() => {
+                          const linked = products.find((p) => p.id === b.productId);
+                          if (!linked) return null;
+                          const info = getPrice(linked);
+                          if (info.price <= 0) return null;
+                          return (
+                            <div className="absolute bottom-2 left-2 rounded-xl bg-white/95 px-3 py-1.5 shadow-md backdrop-blur-xs">
+                              <p className="text-[9px] font-black tracking-wide text-rose-600 uppercase">
+                                {info.isPromo ? 'Promoção' : 'Oferta'}
+                              </p>
+                              <p className="text-sm font-black text-gray-900 sm:text-lg">
+                                {formatBRL(info.price)}
+                                <span className="ml-1 text-[10px] font-bold text-gray-500">/{linked.unit}</span>
+                                {info.isPromo && info.original > info.price && (
+                                  <span className="ml-1.5 text-[10px] font-bold text-gray-400 line-through">
+                                    {formatBRL(info.original)}
+                                  </span>
+                                )}
+                              </p>
+                            </div>
+                          );
+                        })()}
+                        {b.productId && (
+                          <span className="absolute right-2 bottom-2 rounded-full bg-emerald-600/95 px-2.5 py-1 text-[10px] font-black text-white shadow-md">
+                            Toque para comprar
+                          </span>
+                        )}
+                      </div>
                     ) : (
                       <div className="flex aspect-[5/2] w-full items-center justify-between gap-3 bg-gradient-to-r from-emerald-800 via-emerald-600 to-emerald-500 px-4 sm:px-8">
                         <div className="min-w-0 flex-1">

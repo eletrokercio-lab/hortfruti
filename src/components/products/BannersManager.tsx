@@ -172,7 +172,32 @@ export const BannersManager: React.FC<{ products: Product[] }> = ({ products }) 
             />
             {imageUrl && (
               <div className="overflow-hidden rounded-xl border border-gray-200">
-                <img src={imageUrl} alt="Prévia do banner" className="aspect-[5/2] w-full object-cover" />
+                <div className="relative">
+                  <img src={imageUrl} alt="Prévia do banner" className="aspect-[5/2] w-full object-cover" />
+                  {/* Prévia do selo de preço que o comprador verá no banner */}
+                  {productId && (() => {
+                    const linked = products.find((p) => p.id === productId);
+                    if (!linked || linked.defaultPrice <= 0) return null;
+                    return (
+                      <div className="absolute bottom-2 left-2 rounded-xl bg-white/95 px-2.5 py-1 shadow-md">
+                        <p className="text-[9px] font-black text-rose-600 uppercase">Oferta</p>
+                        <p className="text-sm font-black text-gray-900">
+                          R$ {linked.defaultPrice.toFixed(2).replace('.', ',')}
+                          <span className="ml-1 text-[10px] font-bold text-gray-500">/{linked.unit}</span>
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+                {productId && (() => {
+                  const linked = products.find((p) => p.id === productId);
+                  if (!linked) return null;
+                  return (
+                    <p className="border-t border-gray-100 bg-emerald-50/60 px-2.5 py-1.5 text-[10px] font-bold text-emerald-800">
+                      O cliente compra por este valor (com promoção ativa, sai pelo preço promocional)
+                    </p>
+                  );
+                })()}
               </div>
             )}
           </div>
