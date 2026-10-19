@@ -25,6 +25,8 @@ export const BannersManager: React.FC<{ products: Product[] }> = ({ products }) 
   const [sortOrder, setSortOrder] = useState(0);
   // Preço promocional digitado no banner — vira uma promoção real para todos
   const [promoPrice, setPromoPrice] = useState(0);
+  // Preço de promoção já salvo no banner em edição (para não reenviar o alerta à toa)
+  const [originalPromoPrice, setOriginalPromoPrice] = useState(0);
   const [promoUntil, setPromoUntil] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() + 7);
@@ -54,6 +56,7 @@ export const BannersManager: React.FC<{ products: Product[] }> = ({ products }) 
     setActive(true);
     setSortOrder(0);
     setPromoPrice(0);
+    setOriginalPromoPrice(0);
     const d = new Date();
     d.setDate(d.getDate() + 7);
     setPromoUntil(d.toISOString().slice(0, 10));
@@ -125,13 +128,46 @@ export const BannersManager: React.FC<{ products: Product[] }> = ({ products }) 
       // Preço removido ou produto desvinculado → desativa a promoção do banner
       await liveSync.updatePromotion(`banner-${editingId}`, false);
     }
+    // Alerta de promoção para TODOS os clientes ativos — só quando o preço da
+    // promoção é novo ou mudou (evita spam ao salvar o banner sem alteração)
+    const priceChanged = !!banner.promoPrice && banner.promoPrice !== originalPromoPrice;
+    if (banner.active && banner.productId && banner.promoPrice && priceChanged) {
+      try {
+        const client = getSupabaseClient();
+        if (client) {
+          const { data: custs } = await client
+            .from('customers')
+            .select('id')
+            .eq('status', 'active');
+          const prod = products.find((p) => p.id === banner.productId);
+          const ids = ((custs || []) as { id: string }[]).map((c) => c.id);
+          if (ids.length > 0 && prod) {
+            const until = banner.promoUntil
+              ? ` até ${banner.promoUntil.split('-').reverse().join('/')}`
+              : '';
+            await liveSync.pushNotificationToCustomers(ids, {
+              id: `promo-${banner.id}`,
+              type: 'financial',
+              title: 'Nova promoção no catálogo!',
+              message:
+                `${prod.name}: R$ ${banner.promoPrice.toFixed(2).replace('.', ',')}/${prod.unit}${until}. ` +
+                'Confira no banner da loja e aproveite!',
+            });
+          }
+        }
+      } catch {
+        // alerta é um extra: falha não pode travar o salvamento
+      }
+    }
     setSaving(false);
     resetForm();
     await load();
     setMsg(
-      banner.promoPrice && banner.promoPrice > 0
-        ? 'Banner salvo! O preço promocional já vale para todos os clientes na loja.'
-        : 'Banner salvo! Ele já aparece na loja do comprador.'
+      banner.promoPrice && banner.promoPrice > 0 && priceChanged
+        ? 'Banner salvo! Preço promocional ativo para todos e alerta enviado aos clientes.'
+        : banner.promoPrice && banner.promoPrice > 0
+          ? 'Banner salvo! O preço promocional já vale para todos os clientes na loja.'
+          : 'Banner salvo! Ele já aparece na loja do comprador.'
     );
   };
 
@@ -143,6 +179,7 @@ export const BannersManager: React.FC<{ products: Product[] }> = ({ products }) 
     setActive(b.active);
     setSortOrder(b.sortOrder);
     setPromoPrice(b.promoPrice || 0);
+    setOriginalPromoPrice(b.promoPrice || 0);
     if (b.promoUntil) {
       setPromoUntil(b.promoUntil);
     } else {

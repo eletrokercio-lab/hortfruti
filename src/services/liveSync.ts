@@ -462,6 +462,31 @@ export const liveSync = {
     }
   },
 
+  // Alerta em massa para clientes (ex.: nova promoção no banner da loja):
+  // cria uma notificação por cliente ativo numa única requisição
+  pushNotificationToCustomers: async (
+    customerIds: string[],
+    n: { id: string; type: string; title: string; message: string }
+  ): Promise<boolean> => {
+    const client = getSupabaseClient();
+    if (!client || customerIds.length === 0) return false;
+    try {
+      const { error } = await client.from('notifications').insert(
+        customerIds.map((cid) => ({
+          id: `${n.id}-${cid}`,
+          audience: 'comprador' as const,
+          customer_id: cid,
+          type: n.type,
+          title: n.title,
+          message: n.message,
+        }))
+      );
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
   pullNotifications: async (
     audience: 'operador' | 'comprador',
     customerId?: string
