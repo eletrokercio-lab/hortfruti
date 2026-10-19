@@ -37,6 +37,7 @@ import type {
   Delivery,
   CrateRecord,
   AccountsReceivable,
+  Banner,
 } from '../../types';
 import { formatBRL } from '../../utils/formatters';
 import { getCuratedImage } from '../../services/productImageSearch';
@@ -100,6 +101,10 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('todos');
+  // Banners promocionais do topo do catálogo (carrossel)
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [bannerIdx, setBannerIdx] = useState(0);
+  const [highlightId, setHighlightId] = useState<string | null>(null);
 
   // Checkout
   const [deliveryDate, setDeliveryDate] = useState('');
@@ -194,7 +199,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
     if (!silent) setLoading(true);
     const today = new Date().toISOString().split('T')[0];
 
-    const [prodRes, cpRes, promoRes, ordRes, delRes, crateRes, recRes, settingsRes] = await Promise.all([
+    const [prodRes, cpRes, promoRes, ordRes, delRes, crateRes, recRes, settingsRes, bannerRes] = await Promise.all([
       client.from('products').select('*').eq('status', 'active').order('name'),
       client.from('custom_prices').select('*').eq('customer_id', customerId),
       client.from('promotions').select('*').in('customer_id', ['all', customerId]),
@@ -203,7 +208,21 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       client.from('crates').select('*').eq('customer_id', customerId).order('date', { ascending: false }),
       client.from('accounts_receivable').select('*').eq('customer_id', customerId).order('due_date', { ascending: false }),
       client.from('app_settings').select('key,value').in('key', ['pix_key', 'pix_holder']),
+      client.from('banners').select('*').eq('active', true).order('sort_order', { ascending: true }),
     ]);
+
+    if (bannerRes.data)
+      setBanners(
+        (bannerRes.data as any[]).map((b) => ({
+          id: b.id,
+          imageUrl: b.image_url,
+          productId: b.product_id || undefined,
+          title: b.title || undefined,
+          active: !!b.active,
+          sortOrder: Number(b.sort_order || 0),
+        }))
+      );
+    else setBanners([]);
 
     if (prodRes.data)
       setProducts(
@@ -450,6 +469,69 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
       ),
     [products, category, search, getPrice]
   );
+
+  // ===== Carrossel de banners =====
+  // Banners manuais têm prioridade; sem eles, gera banners automáticos
+  // a partir das promoções ativas do cliente
+  const bannerSlides = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (banners.length > 0) {
+      return banners.map((b) => ({ kind: 'custom' as const, banner: b, promoPrice: 0, originalPrice: 0 }));
+    }
+    return promotions
+      .filter(
+        (pr) =>
+          pr.active &&
+          pr.startDate <= todayStr &&
+          pr.endDate >= todayStr &&
+          (pr.customerId === 'all' || pr.customerId === customerId)
+      )
+      .map((pr) => {
+        const prod = products.find((p) => p.id === pr.productId);
+        if (!prod) return null;
+        return {
+          kind: 'auto' as const,
+          banner: {
+            id: 'auto-' + pr.id,
+            imageUrl: prod.imageUrl || '',
+            productId: prod.id,
+            title: prod.name,
+            active: true,
+            sortOrder: 0,
+          },
+          promoPrice: pr.promotionalPrice,
+          originalPrice: prod.defaultPrice,
+        };
+      })
+      .filter(Boolean) as {
+      kind: 'custom' | 'auto';
+      banner: Banner;
+      promoPrice: number;
+      originalPrice: number;
+    }[];
+  }, [banners, promotions, products, customerId]);
+
+  // Auto-avanço do carrossel a cada 5s
+  useEffect(() => {
+    if (bannerSlides.length <= 1) return;
+    const t = setInterval(() => setBannerIdx((i) => (i + 1) % bannerSlides.length), 5000);
+    return () => clearInterval(t);
+  }, [bannerSlides.length]);
+
+  // Toque no banner: busca o produto e destaca o card
+  const goToProduct = (productId?: string) => {
+    if (!productId) return;
+    const prod = products.find((p) => p.id === productId);
+    if (!prod) return;
+    setTab('catalogo');
+    setSearch(prod.name);
+    setCategory('todos');
+    setHighlightId(productId);
+    setTimeout(() => {
+      document.getElementById('prod-' + productId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 200);
+    setTimeout(() => setHighlightId(null), 3500);
+  };
 
   const cartItems = useMemo(() => {
     return Object.entries(cart)
@@ -911,6 +993,69 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
         {/* ===== CATÁLOGO ===== */}
         {tab === 'catalogo' && (
           <div className="space-y-4">
+            {/* Carrossel de banners promocionais */}
+            {!loading && bannerSlides.length > 0 && (() => {
+              const idx = Math.min(bannerIdx, bannerSlides.length - 1);
+              const slide = bannerSlides[idx];
+              const b = slide.banner;
+              return (
+                <div className="relative overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-xs">
+                  <button
+                    onClick={() => goToProduct(b.productId)}
+                    className="block w-full text-left active:scale-[0.99] transition-transform"
+                    title={b.productId ? 'Ver este produto' : undefined}
+                  >
+                    {slide.kind === 'custom' ? (
+                      <img
+                        src={b.imageUrl}
+                        alt={b.title || 'Promoção'}
+                        className="aspect-[5/2] w-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex aspect-[5/2] w-full items-center justify-between gap-3 bg-gradient-to-r from-emerald-800 via-emerald-600 to-emerald-500 px-4 sm:px-8">
+                        <div className="min-w-0 flex-1">
+                          <span className="inline-block rounded-full bg-rose-500 px-2.5 py-1 text-[9px] font-black tracking-wide text-white sm:text-[10px]">
+                            PROMOÇÃO
+                          </span>
+                          <p className="mt-1.5 truncate text-lg font-black text-white sm:text-2xl">{b.title}</p>
+                          <p className="text-sm font-black text-white sm:text-xl">
+                            {formatBRL(slide.promoPrice)}
+                            <span className="ml-2 text-[11px] font-bold text-emerald-100 line-through sm:text-sm">
+                              {formatBRL(slide.originalPrice)}
+                            </span>
+                          </p>
+                          <p className="mt-0.5 text-[10px] font-bold text-emerald-100 sm:text-xs">Toque para ver o produto</p>
+                        </div>
+                        {b.imageUrl ? (
+                          <img
+                            src={b.imageUrl}
+                            alt={b.title || ''}
+                            className="h-4/5 w-20 shrink-0 rounded-xl border-2 border-white/30 object-cover sm:w-36"
+                          />
+                        ) : (
+                          <span className="shrink-0 text-4xl sm:text-6xl">🧺</span>
+                        )}
+                      </div>
+                    )}
+                  </button>
+                  {bannerSlides.length > 1 && (
+                    <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1.5">
+                      {bannerSlides.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setBannerIdx(i)}
+                          aria-label={'Banner ' + (i + 1)}
+                          className={`h-1.5 rounded-full transition-all ${
+                            i === idx ? 'w-5 bg-white' : 'w-1.5 bg-white/60'
+                          }`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="flex flex-col gap-2 md:flex-row">
               <div className="relative flex-1">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -957,9 +1102,12 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                   return (
                     <div
                       key={p.id}
+                      id={'prod-' + p.id}
                       className={`rounded-xl border bg-white p-3 shadow-xs transition-all ${
                         noPrice
                           ? 'pointer-events-none border-gray-200 opacity-45 grayscale'
+                          : highlightId === p.id
+                          ? 'border-emerald-500 ring-4 ring-emerald-300'
                           : qty > 0
                           ? 'border-emerald-400 ring-2 ring-emerald-100'
                           : 'border-gray-200'

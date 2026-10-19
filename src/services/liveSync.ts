@@ -17,6 +17,7 @@ import type {
   ProductUnit,
   ProductSalesType,
   DeliveryStatus,
+  Banner,
 } from '../types';
 
 /**
@@ -606,6 +607,58 @@ export const liveSync = {
     if (!client) return;
     try {
       await client.from('custom_prices').delete().eq('id', id);
+    } catch {
+      // silencioso
+    }
+  },
+
+  // ----------------------------------------------------------
+  // BANNERS da loja do comprador
+  // ----------------------------------------------------------
+  pullBanners: async (): Promise<Banner[] | null> => {
+    const client = getSupabaseClient();
+    if (!client) return null;
+    try {
+      const { data, error } = await client
+        .from('banners')
+        .select('*')
+        .order('sort_order', { ascending: true });
+      if (error) return null;
+      return (data || []).map((b: any) => ({
+        id: b.id,
+        imageUrl: b.image_url,
+        productId: b.product_id || undefined,
+        title: b.title || undefined,
+        active: !!b.active,
+        sortOrder: Number(b.sort_order || 0),
+      }));
+    } catch {
+      return null;
+    }
+  },
+
+  pushBanner: async (b: Banner): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('banners').upsert({
+        id: b.id,
+        image_url: b.imageUrl,
+        product_id: b.productId || null,
+        title: b.title || null,
+        active: b.active,
+        sort_order: b.sortOrder,
+      });
+    } catch {
+      // silencioso
+    }
+  },
+
+  deleteBanner: async (id: string): Promise<void> => {
+    const client = getSupabaseClient();
+    if (!client) return;
+    try {
+      await client.from('banners').delete().eq('id', id);
     } catch {
       // silencioso
     }

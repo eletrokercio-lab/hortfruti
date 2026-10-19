@@ -65,6 +65,16 @@ export interface Promotion {
   active: boolean;
 }
 
+// Banner promocional da loja do comprador (carrossel do catálogo)
+export interface Banner {
+  id: string;
+  imageUrl: string;
+  productId?: string;
+  title?: string;
+  active: boolean;
+  sortOrder: number;
+}
+
 export type ProductCategory = 
   | 'frutas' 
   | 'legumes' 

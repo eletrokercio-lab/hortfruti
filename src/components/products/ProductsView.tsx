@@ -12,14 +12,19 @@ import {
   TrendingUp,
   Loader2,
   ImageIcon,
+  Megaphone,
 } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { Product, ProductCategory, ProductSalesType, ProductUnit } from '../../types';
 import { formatBRL } from '../../utils/formatters';
 import { searchProductImages, getCuratedImage, ProductImageOption } from '../../services/productImageSearch';
+import { BannersManager } from './BannersManager';
 
 export const ProductsView: React.FC = () => {
   const { products, createProduct, updateProduct } = useApp();
+
+  // Sub-painéis da tela: catálogo de produtos ou banners da loja
+  const [panel, setPanel] = useState<'produtos' | 'banners'>('produtos');
 
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -248,32 +253,72 @@ export const ProductsView: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-            <Box className="h-6 w-6 text-emerald-600" />
-            Catálogo de Produtos & Tabela Base
+            {panel === 'produtos' ? (
+              <>
+                <Box className="h-6 w-6 text-emerald-600" />
+                Catálogo de Produtos & Tabela Base
+              </>
+            ) : (
+              <>
+                <Megaphone className="h-6 w-6 text-emerald-600" />
+                Banners da Loja
+              </>
+            )}
           </h1>
           <p className="text-xs text-gray-500 mt-0.5">
-            Cadastro de hortifrutis, custos médios, unidades e margens de venda
+            {panel === 'produtos'
+              ? 'Cadastro de hortifrutis, custos médios, unidades e margens de venda'
+              : 'Carrossel de promoções que o comprador vê no topo do catálogo (imagem 1200 × 480 px)'}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => setShowPhotoReview(true)}
-            className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-800 shadow-sm transition-all active:scale-95"
-          >
-            <ImageIcon className="h-4 w-4" />
-            <span>Conferir Fotos</span>
-          </button>
-          <button
-            onClick={handleOpenNew}
-            className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
-          >
-            <Plus className="h-4 w-4" />
-            <span>Novo Produto</span>
-          </button>
+          {/* Alternância Produtos / Banners */}
+          <div className="flex overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+            <button
+              onClick={() => setPanel('produtos')}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold transition-colors ${
+                panel === 'produtos' ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Box className="h-3.5 w-3.5" />
+              Produtos
+            </button>
+            <button
+              onClick={() => setPanel('banners')}
+              className={`flex items-center gap-1.5 px-3 py-2.5 text-xs font-bold transition-colors ${
+                panel === 'banners' ? 'bg-emerald-600 text-white' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              <Megaphone className="h-3.5 w-3.5" />
+              Banners
+            </button>
+          </div>
+          {panel === 'produtos' && (
+            <>
+              <button
+                onClick={() => setShowPhotoReview(true)}
+                className="flex items-center gap-2 rounded-xl border border-emerald-300 bg-white hover:bg-emerald-50 px-4 py-2.5 text-xs font-bold text-emerald-800 shadow-sm transition-all active:scale-95"
+              >
+                <ImageIcon className="h-4 w-4" />
+                <span>Conferir Fotos</span>
+              </button>
+              <button
+                onClick={handleOpenNew}
+                className="flex items-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition-all active:scale-95"
+              >
+                <Plus className="h-4 w-4" />
+                <span>Novo Produto</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {panel === 'banners' && <BannersManager products={products} />}
+
+      {panel === 'produtos' && (
+      <>
       {/* Filter and Search Bar */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-2xs">
         <div className="relative flex-1">
@@ -723,6 +768,8 @@ export const ProductsView: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+      </>
       )}
     </div>
   );
