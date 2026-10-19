@@ -924,7 +924,7 @@ export const BuyerPortal: React.FC<BuyerPortalProps> = ({ customerId, buyerName,
                 )}
               </button>
               {notifOpen && (
-                <div className="absolute right-0 top-11 z-40 w-80 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
+                <div className="fixed right-3 top-14 z-40 w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg">
                   <div className="border-b border-gray-100 px-4 py-2.5 text-sm font-bold text-gray-900">
                     Notificações
                   </div>
