@@ -73,6 +73,11 @@ export interface Banner {
   title?: string;
   active: boolean;
   sortOrder: number;
+  // Preço promocional digitado no banner — cria/atualiza uma promoção real
+  // para TODOS os clientes enquanto o banner estiver ativo
+  promoPrice?: number;
+  // Data final da promoção do banner (YYYY-MM-DD)
+  promoUntil?: string;
 }
 
 export type ProductCategory = 

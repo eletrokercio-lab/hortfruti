@@ -631,6 +631,8 @@ export const liveSync = {
         title: b.title || undefined,
         active: !!b.active,
         sortOrder: Number(b.sort_order || 0),
+        promoPrice: b.promo_price != null ? Number(b.promo_price) : undefined,
+        promoUntil: b.promo_until || undefined,
       }));
     } catch {
       return null;
@@ -648,6 +650,8 @@ export const liveSync = {
         title: b.title || null,
         active: b.active,
         sort_order: b.sortOrder,
+        promo_price: b.promoPrice ?? null,
+        promo_until: b.promoUntil || null,
       });
     } catch {
       // silencioso
