@@ -105,8 +105,64 @@ export const OrderDetailModal: React.FC<OrderDetailModalProps> = ({
     }
   };
 
+  // Impressão dedicada: gera um documento limpo com TODOS os itens.
+  // Sem limite de altura — se não couber em uma folha, o navegador quebra
+  // automaticamente para a próxima (com o cabeçalho da tabela repetido).
   const handlePrint = () => {
-    window.print();
+    const rows = order.items
+      .map(
+        (item) => `
+          <tr>
+            <td><strong>${item.productName}</strong>${item.isPromo ? ' <span class="promo">PROMOÇÃO</span>' : ''}</td>
+            <td class="center">${item.quantity} ${item.unit}</td>
+            <td class="right">${formatBRL(item.unitPrice)}</td>
+            <td class="right"><strong>${formatBRL(item.subtotal)}</strong></td>
+          </tr>`
+      )
+      .join('');
+    const w = window.open('', '_blank');
+    if (!w) {
+      window.alert('Permita as janelas pop-up do site para imprimir o pedido.');
+      return;
+    }
+    w.document.write(`<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
+      <title>${order.orderNumber} — ${order.customerName}</title>
+      <style>
+        body{font-family:Arial,Helvetica,sans-serif;margin:20px;color:#111}
+        h1{font-size:18px;margin:0 0 2px}
+        .sub{color:#555;font-size:12px;margin:0 0 14px}
+        .meta{display:flex;flex-wrap:wrap;gap:8px 24px;font-size:11px;margin-bottom:14px}
+        .meta div span{display:block;text-transform:uppercase;color:#666;font-size:9px;font-weight:bold}
+        .meta div b{font-size:12px}
+        table{width:100%;border-collapse:collapse;font-size:12px}
+        th,td{border:1px solid #ddd;padding:7px 8px;text-align:left;vertical-align:top}
+        th{background:#ecfdf5;text-transform:uppercase;font-size:10px}
+        td.center{text-align:center}
+        td.right{text-align:right;white-space:nowrap}
+        thead{display:table-header-group}
+        tr{page-break-inside:avoid}
+        .promo{background:#ffe4e6;color:#be123c;font-size:9px;font-weight:bold;padding:1px 4px;border-radius:3px}
+        .total{margin-top:14px;text-align:right;font-size:15px;font-weight:bold}
+        .obs{margin-top:12px;font-size:11px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px}
+        @page{margin:14mm}
+      </style></head><body>
+      <h1>${order.orderNumber} <span style="font-weight:normal;font-size:13px">· ${order.customerName}</span></h1>
+      <p class="sub">Pedido emitido pelo sistema HortiGestão · ${order.items.length} ${order.items.length === 1 ? 'item' : 'itens'}</p>
+      <div class="meta">
+        <div><span>Data Emissão</span><b>${formatDate(order.date)}</b></div>
+        <div><span>Data Entrega</span><b>${formatDate(order.deliveryDate)}</b></div>
+        <div><span>Forma Pagto</span><b>${(order.paymentMethod || '').toUpperCase()}</b></div>
+        <div><span>Condição</span><b>${getPaymentTermLabel(order.paymentTerm)}</b></div>
+      </div>
+      <table>
+        <thead><tr><th>Produto</th><th style="text-align:center">Quantidade</th><th style="text-align:right">Preço Unit.</th><th style="text-align:right">Subtotal</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <p class="total">Valor Final: ${formatBRL(order.total)}</p>
+      ${order.notes ? `<div class="obs"><strong>Observações:</strong> ${order.notes}</div>` : ''}
+      <script>window.onload=function(){window.print();}</script>
+      </body></html>`);
+    w.document.close();
   };
 
   return (
