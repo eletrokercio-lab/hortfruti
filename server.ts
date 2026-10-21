@@ -326,7 +326,7 @@ app.post('/api/admin/users', async (req: Request, res: Response) => {
   }
 });
 
-// PATCH /api/admin/users — aprovar (pendente->ativo), bloquear ou reativar
+// PATCH /api/admin/users — aprovar (pendente->ativo), bloquear, reativar ou redefinir senha
 app.patch('/api/admin/users', async (req: Request, res: Response) => {
   const gate = await requireMaster(req);
   if (!gate.ok) {
@@ -334,9 +334,34 @@ app.patch('/api/admin/users', async (req: Request, res: Response) => {
     return;
   }
   try {
-    const { userId, status } = req.body;
-    if (!userId || !['ativo', 'pendente', 'bloqueado'].includes(status)) {
-      res.status(400).json({ error: 'Informe userId e status válido (ativo, pendente ou bloqueado).' });
+    const { userId, status, password } = req.body;
+    if (!userId) {
+      res.status(400).json({ error: 'Informe o userId.' });
+      return;
+    }
+
+    // Redefinição de senha: o master define a nova senha de acesso da conta
+    if (password !== undefined) {
+      if (typeof password !== 'string' || password.length < 6) {
+        res.status(400).json({ error: 'A nova senha deve ter pelo menos 6 caracteres.' });
+        return;
+      }
+      const pwdRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/users/${userId}`, {
+        method: 'PUT',
+        headers: serviceHeaders,
+        body: JSON.stringify({ password, ban_duration: 'none' }),
+      });
+      if (!pwdRes.ok) {
+        const err: any = await pwdRes.json().catch(() => ({}));
+        res.status(400).json({ error: err.msg || err.message || 'Falha ao redefinir a senha.' });
+        return;
+      }
+      res.json({ success: true, message: 'Senha redefinida! A pessoa já pode entrar com a nova senha.' });
+      return;
+    }
+
+    if (!status || !['ativo', 'pendente', 'bloqueado'].includes(status)) {
+      res.status(400).json({ error: 'Informe userId e status válido (ativo, pendente ou bloqueado), ou uma nova senha.' });
       return;
     }
     const patchRes = await fetch(`${SUPABASE_URL}/rest/v1/app_profiles?id=eq.${userId}`, {

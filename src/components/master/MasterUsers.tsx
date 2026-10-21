@@ -145,6 +145,39 @@ export const MasterUsers: React.FC = () => {
     }
   };
 
+  // Redefine a senha de acesso de uma conta (master)
+  const handleResetPassword = async (p: AppProfile) => {
+    if (!session) return;
+    const nova = window.prompt(
+      `Nova senha de acesso para ${p.full_name || p.email}\n(mínimo 6 caracteres — informe a pessoa depois):`,
+      ''
+    );
+    if (nova === null) return;
+    if (nova.trim().length < 6) {
+      setMessage({ type: 'err', text: 'A nova senha deve ter pelo menos 6 caracteres.' });
+      return;
+    }
+    setMessage(null);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId: p.id, password: nova.trim() }),
+      });
+      const json = await res.json();
+      setMessage(
+        json.success
+          ? { type: 'ok', text: json.message }
+          : { type: 'err', text: json.error || 'Falha ao redefinir a senha.' }
+      );
+    } catch {
+      setMessage({ type: 'err', text: 'Erro de conexão.' });
+    }
+  };
+
   const handleSavePix = async () => {
     const { getSupabaseClient } = await import('../../lib/supabase');
     const client = getSupabaseClient();
@@ -389,6 +422,15 @@ export const MasterUsers: React.FC = () => {
                     className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1.5 text-[11px] font-bold text-white hover:bg-emerald-700"
                   >
                     <CheckCircle2 className="h-3 w-3" /> Aprovar
+                  </button>
+                )}
+                {p.role !== 'master' && (
+                  <button
+                    onClick={() => handleResetPassword(p)}
+                    className="flex items-center gap-1 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] font-bold text-amber-700 hover:bg-amber-100"
+                    title="Definir uma nova senha de acesso para esta conta"
+                  >
+                    <KeyRound className="h-3 w-3" /> Resetar senha
                   </button>
                 )}
                 {p.status !== 'bloqueado' && p.role !== 'master' && (
